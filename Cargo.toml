@@ -8,19 +8,25 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 
-hyper = { version = "1", features = ["full"] }
-hyper-util = { version = "0.1", features = ["server", "tokio", "http1", "http2"] }
+hyper = { version = "1", features = ["http1", "http2", "server"] }
+hyper-util = { version = "0.1", features = ["server", "client", "client-legacy", "tokio", "http1", "http2"] }
 http-body-util = "0.1"
 bytes = "1"
-
+mime_guess = "2"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 
-base64 = "0.21"
+base64 = "0.22"
 sha1 = "0.10"
-chrono = "0.4"
-mime_guess = "2"
+hex = "0.4"
+regex = "1"
+parking_lot = "0.12"
 
 rustls = "0.22"
 tokio-rustls = "0.25"
 rustls-pemfile = "2"
+flate2 = "1"
+chrono = "0.4"
+
+
+
