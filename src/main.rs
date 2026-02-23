@@ -1,50 +1,49 @@
-use std::{
-    convert::Infallible,
-    fs::File,
-    io::{BufReader},
-    net::{IpAddr, SocketAddr},
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+
+
+
+mod access_log;
+mod cache;
+mod static_handler;
+mod gzip;
+mod htaccess;
+mod proxy;
 
 use anyhow::Result;
-use base64::{engine::general_purpose, Engine as _};
-use bytes::Bytes;
-use chrono::Local;
 use clap::Parser;
-use hyper::{
-    body::Incoming,
-    header::{AUTHORIZATION, CONTENT_TYPE},
-    service::service_fn,
-    Request, Response, StatusCode,
-};
+use hyper::{Request, Response, body::Incoming};
 use hyper_util::{
-    rt::TokioExecutor,
+    rt::{TokioExecutor, TokioIo},
     server::conn::auto::Builder,
 };
-use http_body_util::Full;
-use mime_guess::from_path;
-use sha1::{Digest, Sha1};
-use tokio::net::TcpListener;
-use tokio_rustls::{TlsAcceptor};
-use rustls::{
-    ServerConfig,
-    pki_types::{CertificateDer, PrivateKeyDer},
-};
+use http_body_util::combinators::BoxBody;
+use bytes::Bytes;
+use tokio::{net::TcpListener};
+use tokio_rustls::TlsAcceptor;
+use std::{sync::Arc, net::SocketAddr, path::PathBuf};
+use rustls::{ServerConfig};
 use rustls_pemfile::{certs, pkcs8_private_keys};
+use std::fs::File;
+use std::io::BufReader;
 
-use hyper_util::rt::TokioIo;
+use hyper::service::service_fn;
 
-type RespBody = Full<Bytes>;
+use proxy::reverse::RespBody;
+
+
+enum HandlerResponse {
+    Static(Response<RespBody>),
+    Proxy(Response<RespBody>),
+}
 
 #[derive(Parser)]
 struct Args {
+    #[arg(short, long, default_value = "./public")]
     root: String,
 
-    #[arg(short='H', long, default_value="127.0.0.1")]
-    host: IpAddr,
+    #[arg(short, long, default_value = "127.0.0.1")]
+    host: String,
 
-    #[arg(short='p', long, default_value_t=8080)]
+    #[arg(short, long, default_value_t = 8080)]
     port: u16,
 
     #[arg(long)]
@@ -59,223 +58,142 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let root = std::fs::canonicalize(&args.root)?;
-    let addr = SocketAddr::new(args.host, args.port);
-
-    println!("Serving {}", root.display());
-    println!("Listening on http{}://{}",
-        if args.tls_cert.is_some() { "s" } else { "" },
-        addr);
+    let addr: SocketAddr = format!("{}:{}", args.host, args.port).parse()?;
 
     let listener = TcpListener::bind(addr).await?;
+    println!("Listening on {}", addr);
 
-    let tls_acceptor = if let (Some(cert), Some(key)) =
-        (args.tls_cert.clone(), args.tls_key.clone()) {
+    let tls_acceptor = if let (Some(cert), Some(key)) = (args.tls_cert, args.tls_key) {
         Some(load_tls(cert, key)?)
     } else {
         None
     };
 
+    let cache = Arc::new(cache::HtCache::new());
+    let log = Arc::new(access_log::AccessLogger::new("access.log")?);
+
     loop {
         let (stream, remote) = listener.accept().await?;
+
         let root = root.clone();
+        let cache = cache.clone();
+        let log = log.clone();
         let tls_acceptor = tls_acceptor.clone();
 
         tokio::spawn(async move {
-            let service = service_fn(move |req|
-                handle(req, root.clone(), remote.ip())
-            );
+            let service = service_fn(move |req: Request<Incoming>| {
+                let root = root.clone();
+                let cache = cache.clone();
+                let log = log.clone();
 
-            // if let Some(acceptor) = tls_acceptor {
-            //     let stream = acceptor.accept(stream).await.unwrap();
-            //     Builder::new(TokioExecutor::new())
-            //         .serve_connection(stream, service)
-            //         .await
-            //         .unwrap();
-            // } else {
-            //     Builder::new(TokioExecutor::new())
-            //         .serve_connection(stream, service)
-            //         .await
-            //         .unwrap();
-            // }
-
-
+                async move {
+                    handle_request(req, root, remote, cache, log).await
+                }
+            });
 
             if let Some(acceptor) = tls_acceptor {
-                let tls_stream = acceptor.accept(stream).await.unwrap();
-                let io = TokioIo::new(tls_stream);
-
-                Builder::new(TokioExecutor::new())
-                    .serve_connection(io, service)
-                    .await
-                    .unwrap();
+                match acceptor.accept(stream).await {
+                    Ok(tls_stream) => {
+                        let io = TokioIo::new(tls_stream);
+                        if let Err(e) =
+                            Builder::new(TokioExecutor::new())
+                                .serve_connection(io, service)
+                                .await
+                        {
+                            eprintln!("Connection error: {}", e);
+                        }
+                    }
+                    Err(e) => eprintln!("TLS error: {}", e),
+                }
             } else {
                 let io = TokioIo::new(stream);
-
-                Builder::new(TokioExecutor::new())
-                    .serve_connection(io, service)
-                    .await
-                    .unwrap();
+                if let Err(e) =
+                    Builder::new(TokioExecutor::new())
+                        .serve_connection(io, service)
+                        .await
+                {
+                    eprintln!("Connection error: {}", e);
+                }
             }
-
-
         });
     }
 }
 
-async fn handle(
+async fn handle_request(
     req: Request<Incoming>,
     root: PathBuf,
-    remote_ip: IpAddr,
-) -> Result<Response<RespBody>, Infallible> {
+    remote: SocketAddr,
+    cache: Arc<cache::HtCache>,
+    log: Arc<access_log::AccessLogger>,
+) -> Result<Response<RespBody>, hyper::Error> {
 
-    log_request(&req, remote_ip);
+    log.log(&req, remote);
 
-    let path = req.uri().path().trim_start_matches('/');
-    let mut fs_path = root.join(path);
+    let path = req.uri().path().to_string();
 
-    if fs_path.is_dir() {
-        fs_path = fs_path.join("index.html");
+    // Resolve .htaccess rules
+    let rules = htaccess::resolver::resolve(&root, &path, &cache).await;
+
+    // IP check
+    if !htaccess::ip::check(&rules, Some(remote.ip())) {
+        return Ok(static_handler::forbidden());
     }
 
-    let fs_path = match std::fs::canonicalize(&fs_path) {
-        Ok(p) => p,
-        Err(_) => return Ok(resp(StatusCode::NOT_FOUND, "Not Found")),
+    // Auth check
+    let auth_header = req.headers().get("authorization")
+        .and_then(|v| v.to_str().ok());
+
+    if !htaccess::auth::check(&rules, auth_header) {
+        return Ok(static_handler::auth_required());
+    }
+
+    // Determine handler type
+    let handler = if let Some(target) = proxy::match_proxy(&rules, &path) {
+        let resp = proxy::reverse::forward_request(req, &target).await?;
+        HandlerResponse::Proxy(resp)
+    } else {
+        let resp = static_handler::serve(&root, &path);
+        HandlerResponse::Static(resp)
     };
 
-    if !fs_path.starts_with(&root) {
-        return Ok(resp(StatusCode::FORBIDDEN, "Forbidden"));
-    }
-
-    if let Some(userfile) = htpasswd_path(&root) {
-        if !check_auth(&req, &userfile) {
-            return Ok(auth_challenge());
-        }
-    }
-
-    match tokio::fs::read(&fs_path).await {
-        Ok(bytes) => {
-            let mime = from_path(&fs_path).first_or_octet_stream();
-            let mut r = Response::new(Full::new(Bytes::from(bytes)));
-            *r.status_mut() = StatusCode::OK;
-            r.headers_mut().insert(
-                CONTENT_TYPE,
-                mime.to_string().parse().unwrap(),
-            );
-            Ok(r)
-        }
-        Err(_) => Ok(resp(StatusCode::NOT_FOUND, "Not Found")),
-    }
-}
-
-fn htpasswd_path(root: &Path) -> Option<PathBuf> {
-    let p = root.join(".htpasswd");
-    if p.exists() { Some(p) } else { None }
-}
-
-fn check_auth(req: &Request<Incoming>, userfile: &Path) -> bool {
-    let header = match req.headers().get(AUTHORIZATION) {
-        Some(h) => h.to_str().unwrap_or(""),
-        None => return false,
-    };
-
-    if !header.starts_with("Basic ") {
-        return false;
-    }
-
-    let decoded = general_purpose::STANDARD
-        .decode(&header[6..]).unwrap();
-
-    let creds = String::from_utf8_lossy(&decoded);
-    let mut parts = creds.splitn(2, ':');
-    let user = parts.next().unwrap_or("");
-    let pass = parts.next().unwrap_or("");
-
-    let content = std::fs::read_to_string(userfile).unwrap();
-
-    for line in content.lines() {
-        if let Some((u, p)) = line.split_once(':') {
-            if u == user && verify_password(pass, p) {
-                return true;
+    let response = match handler {
+        HandlerResponse::Static(resp) => {
+            if let Some(enc) = req.headers().get("accept-encoding") {
+                if enc.to_str().unwrap_or("").contains("gzip") {
+                    gzip::compress(resp)
+                } else {
+                    resp
+                }
+            } else {
+                resp
             }
         }
-    }
-    false
-}
+        HandlerResponse::Proxy(resp) => {
+            // NEVER gzip proxy responses
+            resp
+        }
+    };
 
-fn verify_password(pass: &str, stored: &str) -> bool {
-    if stored.starts_with("{SHA}") {
-        let mut hasher = Sha1::new();
-        hasher.update(pass.as_bytes());
-        let hash = hasher.finalize();
-        let encoded = general_purpose::STANDARD.encode(hash);
-        encoded == stored[5..]
-    } else {
-        pass == stored
-    }
-}
-
-fn auth_challenge() -> Response<RespBody> {
-    let mut r = resp(StatusCode::UNAUTHORIZED, "Unauthorized");
-    r.headers_mut().insert(
-        "WWW-Authenticate",
-        "Basic realm=\"Restricted\"".parse().unwrap()
-    );
-    r
-}
-
-fn resp(code: StatusCode, body: &str) -> Response<RespBody> {
-    let mut r = Response::new(Full::new(Bytes::from(body.to_string())));
-    *r.status_mut() = code;
-    r
-}
-
-fn log_request(req: &Request<Incoming>, ip: IpAddr) {
-    let now = Local::now().format("%d/%b/%Y:%H:%M:%S %z");
-    println!(
-        "{} - - [{}] \"{} {}\"",
-        ip,
-        now,
-        req.method(),
-        req.uri().path()
-    );
+    Ok(response)
 }
 
 fn load_tls(cert_path: String, key_path: String) -> Result<TlsAcceptor> {
 
     let mut cert_reader = BufReader::new(File::open(cert_path)?);
-    let cert_chain: Vec<CertificateDer<'static>> =
-        certs(&mut cert_reader)
-            .collect::<Result<_, _>>()?;
-
-    // let mut key_reader = BufReader::new(File::open(key_path)?);
-    // let mut keys: Vec<PrivateKeyDer<'static>> =
-    //     pkcs8_private_keys(&mut key_reader)
-    //         .collect::<Result<_, _>>()?;
-
-    // let key = keys.remove(0);
-
-
-
+    let cert_chain = certs(&mut cert_reader)
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut key_reader = BufReader::new(File::open(key_path)?);
-
     let key = pkcs8_private_keys(&mut key_reader)
         .next()
-        .ok_or_else(|| anyhow::anyhow!("No private key found"))??;
-
-    let key = PrivateKeyDer::Pkcs8(key);
-
-
-
-
-
-
+        .ok_or_else(|| anyhow::anyhow!("No key found"))??;
 
     let config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(cert_chain, key)?;
+        .with_single_cert(cert_chain, key.into())?;
 
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
+
 
 
