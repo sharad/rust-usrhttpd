@@ -11,7 +11,7 @@ use std::{
 };
 use tokio::fs::read_to_string;
 use warp::{
-    // http::{HeaderMap, Method, StatusCode},
+    http::{Method, StatusCode},
     hyper::Body,
     path::FullPath,
     reply::Response,
