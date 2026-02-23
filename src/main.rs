@@ -1,6 +1,6 @@
 
 use parking_lot::RwLock;
-use regex::Regex;
+// use regex::Regex;
 use reqwest::Client;
 use std::{
     collections::HashMap,
@@ -11,7 +11,7 @@ use std::{
 };
 use tokio::fs::read_to_string;
 use warp::{
-    http::{HeaderMap, Method, StatusCode},
+    http::{Method, StatusCode},
     hyper::Body,
     path::FullPath,
     reply::Response,
@@ -36,75 +36,73 @@ struct HtAccess {
 /// Parse a single .htaccess file content into HtAccess (very small subset)
 fn parse_htaccess(contents: &str, base_dir: &Path) -> HtAccess {
     let mut h = HtAccess::default();
-    let ip_re = Regex::new(r"(\d{1,3}(\.\d{1,3}){3})").unwrap();
+    // let ip_re = Regex::new(r"(\d{1,3}(\.\d{1,3}){3})").unwrap();
     for line in contents.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
         let parts: Vec<&str> = line.split_whitespace().collect();
-        match parts.get(0).map(|s| s.to_lowercase().as_str()) {
-            Some("authtype") => {
-                if parts.get(1).map(|s| s.to_lowercase()) == Some("basic".to_string()) {
-                    h.auth_basic = true;
+        if let Some(cmd) = parts.get(0) {
+            let cmd = cmd.to_ascii_lowercase();
+            // match parts.get(0).map(|s| s.to_lowercase().as_str()) {
+            match cmd.as_str() {
+                "authtype" => {
+                    if parts.get(1).map(|s| s.to_lowercase()) == Some("basic".to_string()) {
+                        h.auth_basic = true;
+                    }
                 }
-            }
-            Some("authuserfile") => {
-                if let Some(p) = parts.get(1) {
-                    let p = PathBuf::from(p);
-                    let p = if p.is_relative() { base_dir.join(p) } else { p };
-                    h.auth_userfile = Some(p);
+                "authuserfile" => {
+                    if let Some(p) = parts.get(1) {
+                        let p = PathBuf::from(p);
+                        let p = if p.is_relative() { base_dir.join(p) } else { p };
+                        h.auth_userfile = Some(p);
+                    }
                 }
-            }
-            Some("require") => {
-                // Accept "require valid-user" or "require ip 1.2.3.4"
-                if let Some(arg) = parts.get(1) {
-                    if arg.to_lowercase() == "valid-user" {
-                        h.require_valid_user = true;
-                    } else if arg.to_lowercase() == "ip" {
-                        if let Some(ip_s) = parts.get(2) {
-                            if let Ok(ip) = ip_s.parse() {
-                                h.require_ips.push(ip);
+                "require" => {
+                    // Accept "require valid-user" or "require ip 1.2.3.4"
+                    if let Some(arg) = parts.get(1) {
+                        if arg.to_lowercase() == "valid-user" {
+                            h.require_valid_user = true;
+                        } else if arg.to_lowercase() == "ip" {
+                            if let Some(ip_s) = parts.get(2) {
+                                if let Ok(ip) = ip_s.parse() {
+                                    h.require_ips.push(ip);
+                                }
                             }
                         }
                     }
                 }
-            }
-            Some("allow") => {
-                // Allow from 1.2.3.4
-                if parts.get(1).map(|s| s.to_lowercase().as_str()) == Some("from") {
-                    if let Some(ip_s) = parts.get(2) {
-                        if let Ok(ip) = ip_s.parse() {
-                            h.allow_ips.push(ip);
+                "allow" => {
+                    if let Some(arg) = parts.get(1) {
+                        if arg.eq_ignore_ascii_case("from") {
+                            if let Some(ip_s) = parts.get(2) {
+                                if let Ok(ip) = ip_s.parse() {
+                                    h.allow_ips.push(ip);
+                                }
+                            }
                         }
                     }
-                } else if let Some(mat) = ip_re.find(line) {
-                    if let Ok(ip) = mat.as_str().parse() {
-                        h.allow_ips.push(ip);
-                    }
                 }
-            }
-            Some("deny") => {
-                // Deny from x.x.x.x
-                if parts.get(1).map(|s| s.to_lowercase().as_str()) == Some("from") {
-                    if let Some(ip_s) = parts.get(2) {
-                        if let Ok(ip) = ip_s.parse() {
-                            h.deny_ips.push(ip);
+                "deny" => {
+                    if let Some(arg) = parts.get(1) {
+                        if arg.eq_ignore_ascii_case("from") {
+                            if let Some(ip_s) = parts.get(2) {
+                                if let Ok(ip) = ip_s.parse() {
+                                    h.deny_ips.push(ip);
+                                }
+                            }
                         }
                     }
-                } else if let Some(mat) = ip_re.find(line) {
-                    if let Ok(ip) = mat.as_str().parse() {
-                        h.deny_ips.push(ip);
+                }
+                "proxypass" => {
+                    // ProxyPass /prefix http://backend:port/
+                    if let (Some(prefix), Some(target)) = (parts.get(1), parts.get(2)) {
+                        h.proxy_pass.push((prefix.to_string(), target.to_string()));
                     }
                 }
+                _ => {}
             }
-            Some("proxypass") => {
-                // ProxyPass /prefix http://backend:port/
-                if let (Some(prefix), Some(target)) = (parts.get(1), parts.get(2)) {
-                    h.proxy_pass.push((prefix.to_string(), target.to_string()));
-                }
-            }
-            _ => {}
         }
     }
     h
@@ -184,7 +182,9 @@ fn verify_basic_auth(header: Option<&str>, userfile: &Path) -> Result<Option<Str
         return Ok(None);
     }
     let b64 = header[6..].trim();
-    let decoded = base64::decode(b64)?;
+    // let decoded = base64::decode(b64)?;
+    use base64::{engine::general_purpose, Engine as _};
+    let decoded = general_purpose::STANDARD.decode(b64)?;
     let decoded = String::from_utf8_lossy(&decoded);
     let mut parts = decoded.splitn(2, ':');
     let user = parts.next().unwrap_or("").to_string();
@@ -273,7 +273,7 @@ async fn main() {
         .and(cache_filter)
         .and(client_filter)
         .and_then(
-            |method: Method,
+            |_method: Method,
              remote: Option<std::net::SocketAddr>,
              auth_header: Option<String>,
              full: FullPath,
@@ -304,7 +304,7 @@ async fn main() {
                     // forward request (simple GET/POST preserve body not implemented in this tiny demo)
                     let resp = client.get(&target).send().await;
                     match resp {
-                        Ok(mut r) => {
+                        Ok(r) => {
                             let status = r.status();
                             let headers = r.headers().clone();
                             let bytes = r.bytes().await.unwrap_or_default();
@@ -399,7 +399,15 @@ async fn main() {
             },
         );
 
-    println!("Listening on http://{}:{}", listen_addr.0, listen_addr.1);
+    // println!("Listening on http://{}:{}", listen_addr.0, listen_addr.1);
+    println!(
+        "Listening on http://{}.{}.{}.{}:{}",
+        listen_addr.0[0],
+        listen_addr.0[1],
+        listen_addr.0[2],
+        listen_addr.0[3],
+        listen_addr.1
+    );
     warp::serve(route).run(listen_addr).await;
 }
 
