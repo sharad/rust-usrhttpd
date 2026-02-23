@@ -45,7 +45,6 @@ fn parse_htaccess(contents: &str, base_dir: &Path) -> HtAccess {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if let Some(cmd) = parts.get(0) {
             let cmd = cmd.to_ascii_lowercase();
-            // match parts.get(0).map(|s| s.to_lowercase().as_str()) {
             match cmd.as_str() {
                 "authtype" => {
                     if parts.get(1).map(|s| s.to_lowercase()) == Some("basic".to_string()) {
