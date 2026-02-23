@@ -188,7 +188,9 @@ fn verify_basic_auth(header: Option<&str>, userfile: &Path) -> Result<Option<Str
         return Ok(None);
     }
     let b64 = header[6..].trim();
-    let decoded = base64::decode(b64)?;
+    // let decoded = base64::decode(b64)?;
+    use base64::{engine::general_purpose, Engine as _};
+    let decoded = general_purpose::STANDARD.decode(b64)?;
     let decoded = String::from_utf8_lossy(&decoded);
     let mut parts = decoded.splitn(2, ':');
     let user = parts.next().unwrap_or("").to_string();
