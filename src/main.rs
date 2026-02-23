@@ -47,19 +47,19 @@ fn parse_htaccess(contents: &str, base_dir: &Path) -> HtAccess {
             let cmd = cmd.to_ascii_lowercase();
             // match parts.get(0).map(|s| s.to_lowercase().as_str()) {
             match cmd.as_str() {
-                Some("authtype") => {
+                "authtype" => {
                     if parts.get(1).map(|s| s.to_lowercase()) == Some("basic".to_string()) {
                         h.auth_basic = true;
                     }
                 }
-                Some("authuserfile") => {
+                "authuserfile" => {
                     if let Some(p) = parts.get(1) {
                         let p = PathBuf::from(p);
                         let p = if p.is_relative() { base_dir.join(p) } else { p };
                         h.auth_userfile = Some(p);
                     }
                 }
-                Some("require") => {
+                "require" => {
                     // Accept "require valid-user" or "require ip 1.2.3.4"
                     if let Some(arg) = parts.get(1) {
                         if arg.to_lowercase() == "valid-user" {
@@ -73,7 +73,7 @@ fn parse_htaccess(contents: &str, base_dir: &Path) -> HtAccess {
                         }
                     }
                 }
-                Some("allow") => {
+                "allow" => {
                     // Allow from 1.2.3.4
                     if parts.get(1).map(|s| s.to_lowercase().as_str()) == Some("from") {
                         if let Some(ip_s) = parts.get(2) {
@@ -87,7 +87,7 @@ fn parse_htaccess(contents: &str, base_dir: &Path) -> HtAccess {
                         }
                     }
                 }
-                Some("deny") => {
+                "deny" => {
                     // Deny from x.x.x.x
                     if parts.get(1).map(|s| s.to_lowercase().as_str()) == Some("from") {
                         if let Some(ip_s) = parts.get(2) {
@@ -101,7 +101,7 @@ fn parse_htaccess(contents: &str, base_dir: &Path) -> HtAccess {
                         }
                     }
                 }
-                Some("proxypass") => {
+                "proxypass" => {
                     // ProxyPass /prefix http://backend:port/
                     if let (Some(prefix), Some(target)) = (parts.get(1), parts.get(2)) {
                         h.proxy_pass.push((prefix.to_string(), target.to_string()));
