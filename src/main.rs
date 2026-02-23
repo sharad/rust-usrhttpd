@@ -43,70 +43,72 @@ fn parse_htaccess(contents: &str, base_dir: &Path) -> HtAccess {
             continue;
         }
         let parts: Vec<&str> = line.split_whitespace().collect();
-        let cmd = cmd.to_ascii_lowercase();
-        // match parts.get(0).map(|s| s.to_lowercase().as_str()) {
-        match cmd.as_str() {
-            Some("authtype") => {
-                if parts.get(1).map(|s| s.to_lowercase()) == Some("basic".to_string()) {
-                    h.auth_basic = true;
+        if let Some(cmd) = parts.get(0) {
+            let cmd = cmd.to_ascii_lowercase();
+            // match parts.get(0).map(|s| s.to_lowercase().as_str()) {
+            match cmd.as_str() {
+                Some("authtype") => {
+           if parts.get(1).map(|s| s.to_lowercase()) == Some("basic".to_string()) {
+           h.auth_basic = true;
                 }
             }
-            Some("authuserfile") => {
-                if let Some(p) = parts.get(1) {
-                    let p = PathBuf::from(p);
-                    let p = if p.is_relative() { base_dir.join(p) } else { p };
-                    h.auth_userfile = Some(p);
+                Some("authuserfile") => {
+           if let Some(p) = parts.get(1) {
+           let p = PathBuf::from(p);
+           let p = if p.is_relative() { base_dir.join(p) } else { p };
+           h.auth_userfile = Some(p);
                 }
             }
-            Some("require") => {
-                // Accept "require valid-user" or "require ip 1.2.3.4"
-                if let Some(arg) = parts.get(1) {
-                    if arg.to_lowercase() == "valid-user" {
-                        h.require_valid_user = true;
+                Some("require") => {
+           // Accept "require valid-user" or "require ip 1.2.3.4"
+           if let Some(arg) = parts.get(1) {
+           if arg.to_lowercase() == "valid-user" {
+           h.require_valid_user = true;
                     } else if arg.to_lowercase() == "ip" {
-                        if let Some(ip_s) = parts.get(2) {
-                            if let Ok(ip) = ip_s.parse() {
-                                h.require_ips.push(ip);
+           if let Some(ip_s) = parts.get(2) {
+           if let Ok(ip) = ip_s.parse() {
+           h.require_ips.push(ip);
                             }
                         }
                     }
                 }
             }
-            Some("allow") => {
-                // Allow from 1.2.3.4
-                if parts.get(1).map(|s| s.to_lowercase().as_str()) == Some("from") {
-                    if let Some(ip_s) = parts.get(2) {
-                        if let Ok(ip) = ip_s.parse() {
-                            h.allow_ips.push(ip);
+                Some("allow") => {
+           // Allow from 1.2.3.4
+           if parts.get(1).map(|s| s.to_lowercase().as_str()) == Some("from") {
+           if let Some(ip_s) = parts.get(2) {
+           if let Ok(ip) = ip_s.parse() {
+           h.allow_ips.push(ip);
                         }
                     }
                 } else if let Some(mat) = ip_re.find(line) {
-                    if let Ok(ip) = mat.as_str().parse() {
-                        h.allow_ips.push(ip);
+           if let Ok(ip) = mat.as_str().parse() {
+           h.allow_ips.push(ip);
                     }
                 }
             }
-            Some("deny") => {
-                // Deny from x.x.x.x
-                if parts.get(1).map(|s| s.to_lowercase().as_str()) == Some("from") {
-                    if let Some(ip_s) = parts.get(2) {
-                        if let Ok(ip) = ip_s.parse() {
-                            h.deny_ips.push(ip);
+                Some("deny") => {
+           // Deny from x.x.x.x
+           if parts.get(1).map(|s| s.to_lowercase().as_str()) == Some("from") {
+           if let Some(ip_s) = parts.get(2) {
+           if let Ok(ip) = ip_s.parse() {
+           h.deny_ips.push(ip);
                         }
                     }
                 } else if let Some(mat) = ip_re.find(line) {
-                    if let Ok(ip) = mat.as_str().parse() {
-                        h.deny_ips.push(ip);
+           if let Ok(ip) = mat.as_str().parse() {
+           h.deny_ips.push(ip);
                     }
                 }
             }
-            Some("proxypass") => {
-                // ProxyPass /prefix http://backend:port/
-                if let (Some(prefix), Some(target)) = (parts.get(1), parts.get(2)) {
-                    h.proxy_pass.push((prefix.to_string(), target.to_string()));
+                Some("proxypass") => {
+           // ProxyPass /prefix http://backend:port/
+           if let (Some(prefix), Some(target)) = (parts.get(1), parts.get(2)) {
+           h.proxy_pass.push((prefix.to_string(), target.to_string()));
                 }
             }
-            _ => {}
+                _ => {}
+            }
         }
     }
     h
