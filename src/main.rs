@@ -279,7 +279,7 @@ async fn main() {
         .and(cache_filter)
         .and(client_filter)
         .and_then(
-            |method: Method,
+            |_method: Method,
              remote: Option<std::net::SocketAddr>,
              auth_header: Option<String>,
              full: FullPath,
