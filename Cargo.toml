@@ -9,7 +9,7 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 
 hyper = { version = "1", features = ["http1", "http2", "server"] }
-hyper-util = { version = "0.1", features = ["server", "client", "tokio", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["server", "client", "client-legacy", "tokio", "http1", "http2"] }
 http-body-util = "0.1"
 bytes = "1"
 mime_guess = "2"

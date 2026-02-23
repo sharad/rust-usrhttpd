@@ -15,8 +15,8 @@ use hyper_util::{
     rt::{TokioExecutor, TokioIo},
     server::conn::auto::Builder,
 };
-use http_body_util::combinators::BoxBody;
-use bytes::Bytes;
+// use http_body_util::combinators::BoxBody;
+// use bytes::Bytes;
 use tokio::{net::TcpListener};
 use tokio_rustls::TlsAcceptor;
 use std::{sync::Arc, net::SocketAddr, path::PathBuf};
@@ -160,7 +160,13 @@ async fn handle_request(
         HandlerResponse::Static(resp) => {
             if let Some(enc) = req.headers().get("accept-encoding") {
                 if enc.to_str().unwrap_or("").contains("gzip") {
-                    gzip::compress(resp)
+                    // gzip::compress(resp)
+                    if enc.to_str().unwrap_or("").contains("gzip") {
+                        gzip::compress(resp).await
+                    } else {
+                        resp
+                    }
+
                 } else {
                     resp
                 }

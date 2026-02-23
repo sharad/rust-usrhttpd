@@ -46,3 +46,16 @@ fn resp(code: StatusCode, body: &str) -> Response<RespBody> {
 }
 
 
+pub fn forbidden() -> Response<RespBody> {
+    resp(StatusCode::FORBIDDEN, "Forbidden")
+}
+
+pub fn auth_required() -> Response<RespBody> {
+    let mut r = resp(StatusCode::UNAUTHORIZED, "Unauthorized");
+    r.headers_mut().insert(
+        "WWW-Authenticate",
+        "Basic realm=\"Restricted\"".parse().unwrap(),
+    );
+    r
+}
+

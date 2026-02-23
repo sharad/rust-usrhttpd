@@ -7,6 +7,7 @@ use std::{
 
 use crate::htaccess::rules::HtAccess;
 
+#[derive(Clone)]
 pub struct Cached {
     pub mtime: SystemTime,
     pub rules: HtAccess,

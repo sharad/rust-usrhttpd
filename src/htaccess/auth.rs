@@ -29,7 +29,11 @@ pub fn check(r: &HtAccess, header: Option<&str>) -> bool {
         None => return false,
     };
 
-    let content = fs::read_to_string(file).ok()?;
+    // let content = fs::read_to_string(file).ok()?;
+    let content = match fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
 
     for line in content.lines() {
         if let Some((u, p)) = line.split_once(':') {

@@ -6,7 +6,8 @@ use http_body_util::combinators::BoxBody;
 use bytes::Bytes;
 use anyhow::Result;
 
-pub type RespBody = BoxBody<Bytes, hyper::Error>;
+// pub type RespBody = BoxBody<Bytes, hyper::Error>;
+pub type RespBody = BoxBody<Bytes, std::convert::Infallible>;
 
 pub async fn forward_request(
     mut req: Request<Incoming>,
