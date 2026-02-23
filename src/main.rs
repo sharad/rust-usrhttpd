@@ -310,7 +310,7 @@ async fn main() {
                     // forward request (simple GET/POST preserve body not implemented in this tiny demo)
                     let resp = client.get(&target).send().await;
                     match resp {
-                        Ok(mut r) => {
+                        Ok(r) => {
                             let status = r.status();
                             let headers = r.headers().clone();
                             let bytes = r.bytes().await.unwrap_or_default();
