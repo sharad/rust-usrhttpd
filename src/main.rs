@@ -298,6 +298,11 @@ async fn main() {
                     .into_response());
                 }
 
+
+                 println!("Request: {} from {:?} for {} (rules: {:?})",
+                          uri_path, remote_ip, fs_path.display(), rules);
+
+
                 // 2) Proxy handling
                 if let Some(target) = match_proxy(&rules, uri_path) {
                     // forward request (simple GET/POST preserve body not implemented in this tiny demo)
@@ -369,6 +374,9 @@ async fn main() {
                 } else {
                     fs::canonicalize(&fs_path).unwrap_or(root_dir.join("index.html"))
                 };
+
+
+                 println!("Serving file: {} (requested: {})", file_path.display(), fs_path.display());
 
                 // Security: ensure file_path still under root_dir (prevent directory traversal)
                 if !file_path.starts_with(&root_dir) {
