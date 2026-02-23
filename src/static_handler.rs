@@ -1,12 +1,12 @@
 
 
 use hyper::{Response, StatusCode};
-use http_body_util::Full;
 use bytes::Bytes;
 use mime_guess::from_path;
 use std::{path::PathBuf, fs};
-use http_body_util::BodyExt; // for .boxed()
-use crate::proxy::reverse::RespBody;
+use http_body_util::{Full, BodyExt};
+use crate::types::RespBody;
+
 
 // pub type RespBody = BoxBody<Bytes, hyper::Error>;
 
@@ -25,7 +25,10 @@ pub fn serve(root: &PathBuf, path: &str) -> Response<RespBody> {
             // let mut r = Response::new(Full::new(Bytes::from(bytes)));
 
             let mut r = Response::new(
-                Full::new(Bytes::from(bytes)).boxed()
+                // Full::new(Bytes::from(bytes)).boxed()
+                Full::new(Bytes::from(bytes))
+                    .map_err(|never| match never {})
+                    .boxed()
             );
 
             r.headers_mut().insert("content-type", mime.to_string().parse().unwrap());
@@ -40,7 +43,7 @@ fn resp(code: StatusCode, body: &str) -> Response<RespBody> {
         .status(code)
         // .body(Full::new(Bytes::from(body.to_string())))
         .body(
-            Full::new(Bytes::from(body.to_string())).boxed()
+            Full::new(Bytes::from(body.to_string())).map_err(|never| match never {}).boxed()
         )
         .unwrap()
 }

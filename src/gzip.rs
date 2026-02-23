@@ -4,7 +4,7 @@ use bytes::Bytes;
 use flate2::{write::GzEncoder, Compression};
 use std::io::Write;
 
-use crate::proxy::reverse::RespBody;
+use crate::types::RespBody;
 
 pub async fn compress(resp: Response<RespBody>) -> Response<RespBody> {
     let (parts, body) = resp.into_parts();
@@ -16,7 +16,7 @@ pub async fn compress(resp: Response<RespBody>) -> Response<RespBody> {
             // If we fail to collect, just return empty body safely
             return Response::from_parts(
                 parts,
-                Full::new(Bytes::new()).boxed(),
+                Full::new(Bytes::new()).map_err(|never| match never {}).boxed(),
             );
         }
     };
@@ -27,7 +27,7 @@ pub async fn compress(resp: Response<RespBody>) -> Response<RespBody> {
 
     let mut new_resp = Response::from_parts(
         parts,
-        Full::new(Bytes::from(compressed)).boxed(),
+        Full::new(Bytes::from(compressed)).map_err(|never| match never {}).boxed(),
     );
 
     new_resp.headers_mut().insert(

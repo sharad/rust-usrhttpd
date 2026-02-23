@@ -7,6 +7,7 @@ mod static_handler;
 mod gzip;
 mod htaccess;
 mod proxy;
+mod types;
 
 use anyhow::Result;
 use clap::Parser;
@@ -27,7 +28,7 @@ use std::io::BufReader;
 
 use hyper::service::service_fn;
 
-use proxy::reverse::RespBody;
+use crate::types::RespBody;
 
 
 enum HandlerResponse {
@@ -147,9 +148,16 @@ async fn handle_request(
         return Ok(static_handler::auth_required());
     }
 
-    // Determine handler type
+
+    let accept_encoding = req
+        .headers()
+        .get("accept-encoding")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
     let handler = if let Some(target) = proxy::match_proxy(&rules, &path) {
-        let resp = proxy::reverse::forward_request(req, &target).await?;
+        // let resp = proxy::reverse::forward_request(req, &target).await?;
+        let resp = proxy::reverse::forward_request(req, &target).await;
         HandlerResponse::Proxy(resp)
     } else {
         let resp = static_handler::serve(&root, &path);
@@ -158,15 +166,9 @@ async fn handle_request(
 
     let response = match handler {
         HandlerResponse::Static(resp) => {
-            if let Some(enc) = req.headers().get("accept-encoding") {
-                if enc.to_str().unwrap_or("").contains("gzip") {
-                    // gzip::compress(resp)
-                    if enc.to_str().unwrap_or("").contains("gzip") {
-                        gzip::compress(resp).await
-                    } else {
-                        resp
-                    }
-
+            if let Some(enc) = accept_encoding {
+                if enc.contains("gzip") {
+                    gzip::compress(resp).await
                 } else {
                     resp
                 }
@@ -174,10 +176,7 @@ async fn handle_request(
                 resp
             }
         }
-        HandlerResponse::Proxy(resp) => {
-            // NEVER gzip proxy responses
-            resp
-        }
+        HandlerResponse::Proxy(resp) => resp,
     };
 
     Ok(response)
