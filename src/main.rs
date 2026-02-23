@@ -13,9 +13,12 @@ use anyhow::Result;
 use clap::Parser;
 use hyper::{Request, Response, body::Incoming};
 use hyper_util::{
-    rt::{TokioExecutor, TokioIo},
-    server::conn::auto::Builder,
+    rt::TokioIo,
+    // rt::{TokioExecutor, TokioIo},
+    // server::conn::auto::Builder,
+
 };
+use hyper::server::conn::http1;
 // use http_body_util::combinators::BoxBody;
 // use bytes::Bytes;
 use tokio::{net::TcpListener};
@@ -29,7 +32,7 @@ use std::io::BufReader;
 use hyper::service::service_fn;
 
 use crate::types::RespBody;
-
+use crate::proxy::websocket::is_websocket_request;
 
 enum HandlerResponse {
     Static(Response<RespBody>),
@@ -52,6 +55,9 @@ struct Args {
 
     #[arg(long)]
     tls_key: Option<String>,
+
+    // #[arg(long)]
+    // websocket: bool,
 }
 
 #[tokio::main]
@@ -80,6 +86,7 @@ async fn main() -> Result<()> {
         let cache = cache.clone();
         let log = log.clone();
         let tls_acceptor = tls_acceptor.clone();
+        // let websocket_enabled = args.websocket;
 
         tokio::spawn(async move {
             let service = service_fn(move |req: Request<Incoming>| {
@@ -96,29 +103,168 @@ async fn main() -> Result<()> {
                 match acceptor.accept(stream).await {
                     Ok(tls_stream) => {
                         let io = TokioIo::new(tls_stream);
-                        if let Err(e) =
-                            Builder::new(TokioExecutor::new())
-                                .serve_connection(io, service)
-                                .await
-                        {
-                            eprintln!("Connection error: {}", e);
-                        }
+                        serve_connection_with_options(io, service).await;
                     }
                     Err(e) => eprintln!("TLS error: {}", e),
                 }
             } else {
                 let io = TokioIo::new(stream);
-                if let Err(e) =
-                    Builder::new(TokioExecutor::new())
-                        .serve_connection(io, service)
-                        .await
-                {
-                    eprintln!("Connection error: {}", e);
-                }
+                serve_connection_with_options(io, service).await;
             }
         });
     }
 }
+
+
+
+
+// async fn serve_connection_with_options<I, S>(
+//     io: I,
+//     service: S,
+//     enable_ws: bool,
+// )
+// where
+//     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+//     S: hyper::service::Service<Request<Incoming>, Response = Response<RespBody>, Error = hyper::Error>
+//     + Send
+//     + 'static,
+//     S::Future: Send,
+// {
+//     let builder = Builder::new(TokioExecutor::new()).http1();
+
+//     let conn = builder.serve_connection(io, service);
+
+//     let conn = if enable_ws {
+//         conn.with_upgrades()
+//     } else {
+//         conn
+//     };
+
+//     if let Err(e) = conn.await {
+//         eprintln!("Connection error: {}", e);
+//     }
+// }
+
+
+
+// async fn serve_connection_with_options<I, S>(
+//     io: I,
+//     service: S,
+//     enable_ws: bool,
+// )
+// where
+//     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+//     S: hyper::service::Service<
+//         Request<Incoming>,
+//     Response = Response<RespBody>,
+//     Error = hyper::Error,
+//     > + Send + 'static,
+//     S::Future: Send,
+// {
+//     let mut builder = Builder::new(TokioExecutor::new()).http1();
+
+//     if enable_ws {
+//         builder = builder.with_upgrades();
+//     }
+
+//     if let Err(e) = builder.serve_connection(io, service).await {
+//         eprintln!("Connection error: {}", e);
+//     }
+// }
+
+
+// async fn serve_connection_with_options<I, S>(
+//     io: I,
+//     service: S,
+//     enable_ws: bool,
+// )
+// where
+//     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+//     S: hyper::service::Service<
+//         hyper::Request<hyper::body::Incoming>,
+//     Response = hyper::Response<crate::types::RespBody>,
+//     Error = hyper::Error,
+//     > + Send + 'static,
+//     S::Future: Send,
+// {
+//     let builder = Builder::new(TokioExecutor::new()).http1();
+
+//     let conn = builder.serve_connection(io, service);
+
+//     let conn = if enable_ws {
+//         conn.with_upgrades()
+//     } else {
+//         conn
+//     };
+
+//     if let Err(e) = conn.await {
+//         eprintln!("Connection error: {}", e);
+//     }
+// }
+
+
+// async fn serve_connection_with_options<I, S>(
+//     io: I,
+//     service: S,
+//     enable_ws: bool,
+// )
+// where
+//     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+//     S: hyper::service::Service<
+//         hyper::Request<hyper::body::Incoming>,
+//     Response = hyper::Response<crate::types::RespBody>,
+//     Error = hyper::Error,
+//     > + Send + 'static,
+//     S::Future: Send,
+// {
+//     let mut builder = http1::Builder::new();
+
+//     if enable_ws {
+//         builder = builder.keep_alive(true);
+//     }
+
+//     let conn = builder.serve_connection(io, service);
+
+//     let conn = if enable_ws {
+//         conn.with_upgrades()
+//     } else {
+//         conn
+//     };
+
+//     if let Err(e) = conn.await {
+//         eprintln!("Connection error: {}", e);
+//     }
+// }
+
+
+// use hyper::server::conn::http1;
+
+async fn serve_connection_with_options<I, S>(
+    io: I,
+    service: S,
+)
+where
+    I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+    S: hyper::service::Service<
+        hyper::Request<hyper::body::Incoming>,
+    Response = hyper::Response<crate::types::RespBody>,
+    Error = hyper::Error,
+    > + Send + 'static,
+    S::Future: Send,
+{
+    let mut builder = http1::Builder::new();
+
+    builder.keep_alive(true);
+
+    if let Err(e) = builder
+        .serve_connection(io, service)
+        .with_upgrades()
+        .await
+    {
+        eprintln!("Connection error: {}", e);
+    }
+}
+
 
 async fn handle_request(
     req: Request<Incoming>,
@@ -156,8 +302,15 @@ async fn handle_request(
         .map(|s| s.to_string());
 
     let handler = if let Some(target) = proxy::match_proxy(&rules, &path) {
+
+        // --- WebSocket detection ---
+        if is_websocket_request(&req) {
+            let resp = proxy::websocket::handle(req, target).await?;
+            return Ok(resp);
+        }
+
         // let resp = proxy::reverse::forward_request(req, &target).await?;
-        let resp = proxy::reverse::forward_request(req, &target).await;
+        let resp = proxy::reverse::forward_request(req, &target).await?;
         HandlerResponse::Proxy(resp)
     } else {
         let resp = static_handler::serve(&root, &path);
