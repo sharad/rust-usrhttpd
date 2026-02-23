@@ -17,9 +17,27 @@ use warp::{
     reply::Response,
     Filter, Rejection, Reply,
 };
+use clap::Parser;
 
 /// Simple in-memory cache of parsed .htaccess per directory
 type Cache = Arc<RwLock<HashMap<PathBuf, HtAccess>>>;
+
+#[derive(Parser, Debug)]
+#[command(name = "usrhttpd")]
+#[command(about = "Small Rust .htaccess web server")]
+struct Args {
+    /// Root directory to serve
+    #[arg(short, long, default_value = "./public")]
+    root: String,
+
+    /// Host/IP to bind to
+    #[arg(short = 'H', long = "host", default_value = "127.0.0.1")]
+    host: IpAddr,
+
+    /// Port to listen on
+    #[arg(short = 'p', long = "port", default_value_t = 8080)]
+    port: u16,
+}
 
 /// Minimal rule set parsed from .htaccess
 #[derive(Debug, Default, Clone)]
@@ -248,9 +266,20 @@ fn match_proxy(rules: &HtAccess, uri_path: &str) -> Option<String> {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    // Configuration
-    let root_dir = PathBuf::from("./public"); // serve files from ./public
-    let listen_addr = ([127, 0, 0, 1], 8080);
+
+    // Parse CLI arguments
+    let args = Args::parse();
+    // Canonicalize root directory
+    let root_dir = std::fs::canonicalize(&args.root)
+        .expect("root directory must exist");
+    let listen_addr = (args.host, args.port);
+
+    println!("Serving from: {}", root_dir.display());
+    println!("Listening on http://{}:{}", args.host, args.port);
+
+    // // Configuration
+    // let root_dir = fs::canonicalize("./public").expect("public directory must exist");
+    // let listen_addr = ([127, 0, 0, 1], 8080);
 
     // Shared cache
     let cache: Cache = Arc::new(RwLock::new(HashMap::new()));
@@ -290,17 +319,18 @@ async fn main() {
 
                 // 1) IP checks
                 let remote_ip = remote.map(|r| r.ip());
-                if !check_ip_rules(&rules, remote_ip) {
-                    return Ok::<_, Rejection>(warp::reply::with_status(
-                        "Forbidden (IP)",
-                        StatusCode::FORBIDDEN,
-                    )
-                    .into_response());
+                if !rules.allow_ips.is_empty() || !rules.require_ips.is_empty() || !rules.deny_ips.is_empty() {
+                    if !check_ip_rules(&rules, remote_ip) {
+                        return Ok::<_, Rejection>(warp::reply::with_status(
+                            "Forbidden (IP)",
+                            StatusCode::FORBIDDEN,
+                        )
+                                                  .into_response());
+                    }
                 }
 
-
-                 println!("Request: {} from {:?} for {} (rules: {:?})",
-                          uri_path, remote_ip, fs_path.display(), rules);
+                 println!("Request: uri {} from {:?} for fapath: {}, root_dir: {}, (rules: {:?})",
+                          uri_path, remote_ip, fs_path.display(), root_dir.display(), rules);
 
 
                 // 2) Proxy handling
@@ -369,14 +399,31 @@ async fn main() {
 
                 // 4) Serve static file (or index.html if directory)
                 // If path is directory, serve index.html or list not implemented (keep simple)
-                let file_path = if fs_path.is_dir() {
-                    fs::canonicalize(fs_path.join("index.html")).unwrap_or(root_dir.join("index.html"))
-                } else {
-                    fs::canonicalize(&fs_path).unwrap_or(root_dir.join("index.html"))
-                };
+                // let file_path = if fs_path.is_dir() {
+                //     fs::canonicalize(fs_path.join("index.html")).unwrap_or(root_dir.join("index.html"))
+                // } else {
+                //     fs::canonicalize(&fs_path).unwrap_or(root_dir.join("index.html"))
+                // };
+
+                 let file_path = if fs_path.is_dir() {
+                     fs_path.join("index.html")
+                 } else {
+                     fs_path.clone()
+                 };
+
+                 let file_path = match fs::canonicalize(&file_path) {
+                     Ok(p) => p,
+                     Err(_) => {
+                         return Ok::<_, Rejection>(
+                             warp::reply::with_status("Not Found", StatusCode::NOT_FOUND)
+                                 .into_response()
+                         );
+                     }
+                 };
 
 
                  println!("Serving file: {} (requested: {})", file_path.display(), fs_path.display());
+                 println!("Root dir root: {}", root_dir.display());
 
                 // Security: ensure file_path still under root_dir (prevent directory traversal)
                 if !file_path.starts_with(&root_dir) {
@@ -386,6 +433,7 @@ async fn main() {
                     )
                     .into_response());
                 }
+                 println!("Will not be printed");
 
                 match tokio::fs::read(file_path).await {
                     Ok(bytes) => {
@@ -406,15 +454,15 @@ async fn main() {
             },
         );
 
-    // println!("Listening on http://{}:{}", listen_addr.0, listen_addr.1);
-    println!(
-        "Listening on http://{}.{}.{}.{}:{}",
-        listen_addr.0[0],
-        listen_addr.0[1],
-        listen_addr.0[2],
-        listen_addr.0[3],
-        listen_addr.1
-    );
+    // // println!("Listening on http://{}:{}", listen_addr.0, listen_addr.1);
+    // println!(
+    //     "Listening on http://{}.{}.{}.{}:{}",
+    //     listen_addr.0[0],
+    //     listen_addr.0[1],
+    //     listen_addr.0[2],
+    //     listen_addr.0[3],
+    //     listen_addr.1
+    // );
     warp::serve(route).run(listen_addr).await;
 }
 
