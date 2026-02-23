@@ -41,13 +41,13 @@ enum HandlerResponse {
 
 #[derive(Parser)]
 struct Args {
-    #[arg(short, long, default_value = "./public")]
+    #[arg(short = 'r', long, default_value = "./public")]
     root: String,
 
-    #[arg(short, long, default_value = "127.0.0.1")]
+    #[arg(short = 'H', long, default_value = "127.0.0.1")]
     host: String,
 
-    #[arg(short, long, default_value_t = 8080)]
+    #[arg(short = 'p', long, default_value_t = 8080)]
     port: u16,
 
     #[arg(long)]
