@@ -399,7 +399,15 @@ async fn main() {
             },
         );
 
-    println!("Listening on http://{}:{}", listen_addr.0, listen_addr.1);
+    // println!("Listening on http://{}:{}", listen_addr.0, listen_addr.1);
+    println!(
+        "Listening on http://{}.{}.{}.{}:{}",
+        listen_addr.0[0],
+        listen_addr.0[1],
+        listen_addr.0[2],
+        listen_addr.0[3],
+        listen_addr.1
+    );
     warp::serve(route).run(listen_addr).await;
 }
 
