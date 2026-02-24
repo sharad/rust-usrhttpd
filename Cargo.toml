@@ -28,5 +28,6 @@ rustls-pemfile = "2"
 flate2 = "1"
 chrono = "0.4"
 
+pulldown-cmark = "0.9"
 
 

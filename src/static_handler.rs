@@ -4,12 +4,16 @@ use bytes::Bytes;
 use mime_guess::from_path;
 use std::{path::PathBuf, fs};
 use http_body_util::{Full, BodyExt};
+use std::ffi::OsStr;
+use std::process::Command;
+use pulldown_cmark::{Parser, html};
+
 use crate::types::RespBody;
 use crate::htaccess::rules::HtAccess;
 
 pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody> {
     let requested = root.join(path.trim_start_matches('/'));
-    let levels = rules.follow_symlinks.unwrap_or(6);
+    let levels = rules.follow_symlinks.unwrap_or(10);
     let boundary = root
         .ancestors()
         .nth(levels)
@@ -20,12 +24,16 @@ pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody
         Err(_) => return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfiguration"),
     };
 
+    eprintln!("root: {}", root.display());
+    eprint!("Serving static: boundary={}\n", boundary.display());
+
     let p = match fs::canonicalize(&requested) {
-        // Ok(v) if v.starts_with(root_parent) => v,
         Ok(v) => {
-            if !v.starts_with(&boundary) {
-                return resp(StatusCode::FORBIDDEN, "Forbidden");
-            }
+            eprint!("Serving static: requested={}\n", requested.display());
+            eprintln!("Resolved path: {:?}\n", v);
+            // if !v.starts_with(&boundary) {
+            //     return resp(StatusCode::FORBIDDEN, "Forbidden");
+            // }
             v
         }
         Err(_) => return resp(StatusCode::FORBIDDEN, "Forbidden"),
@@ -52,36 +60,38 @@ pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody
 }
 
 fn find_index(dir: &PathBuf) -> Option<PathBuf> {
-    let html = dir.join("index.html");
-    if html.exists() {
-        return Some(html);
-    }
-
-    let htm = dir.join("index.htm");
-    if htm.exists() {
-        return Some(htm);
+    for name in ["index.html", "index.htm", "index.md"] {
+        let path = dir.join(name);
+        if path.exists() {
+            return Some(path);
+        }
     }
 
     None
 }
 
 fn serve_file(path: PathBuf) -> Response<RespBody> {
-    match fs::read(&path) {
-        Ok(bytes) => {
-            let mime = from_path(&path).first_or_octet_stream();
 
-            let mut r = Response::new(
-                Full::new(Bytes::from(bytes))
-                    .map_err(|never| match never {})
-                    .boxed()
-            );
+    if let Some(resp) = render_if_needed(&path) {
+        resp
+    } else {
+        match fs::read(&path) {
+            Ok(bytes) => {
+                let mime = from_path(&path).first_or_octet_stream();
 
-            r.headers_mut()
-                .insert("content-type", mime.to_string().parse().unwrap());
+                let mut r = Response::new(
+                    Full::new(Bytes::from(bytes))
+                        .map_err(|never| match never {})
+                        .boxed()
+                );
 
-            r
+                r.headers_mut()
+                    .insert("content-type", mime.to_string().parse().unwrap());
+
+                r
+            }
+            Err(_) => resp(StatusCode::NOT_FOUND, "Not Found"),
         }
-        Err(_) => resp(StatusCode::NOT_FOUND, "Not Found"),
     }
 }
 
@@ -100,6 +110,29 @@ fn directory_listing(dir: &PathBuf, uri_path: &str) -> Response<RespBody> {
     html.push_str(uri_path);
     html.push_str("</h1><hr><ul>");
 
+    // ----------------------------
+    // Parent directory link
+    // ----------------------------
+    if uri_path != "/" {
+        let parent = if uri_path.ends_with('/') {
+            uri_path.trim_end_matches('/')
+        } else {
+            uri_path
+        };
+
+        let parent = match parent.rfind('/') {
+            Some(0) | None => "/",
+            Some(pos) => &parent[..pos + 1],
+        };
+
+        html.push_str("<li><a href=\"");
+        html.push_str(parent);
+        html.push_str("\">../</a></li>");
+    }
+
+    // ----------------------------
+    // Directory entries
+    // ----------------------------
     while let Some(Ok(entry)) = entries.next() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
@@ -131,6 +164,7 @@ fn directory_listing(dir: &PathBuf, uri_path: &str) -> Response<RespBody> {
     r
 }
 
+
 fn resp(code: StatusCode, body: &str) -> Response<RespBody> {
     Response::builder()
         .status(code)
@@ -157,3 +191,63 @@ pub fn auth_required() -> Response<RespBody> {
 
 
 
+///
+
+
+fn html_response(html: String) -> Response<RespBody> {
+    let mut r = Response::new(
+        Full::new(Bytes::from(html))
+            .map_err(|never| match never {})
+            .boxed()
+    );
+
+    r.headers_mut()
+        .insert("content-type", "text/html; charset=utf-8".parse().unwrap());
+
+    r
+}
+
+fn render_org(path: &PathBuf) -> Option<Response<RespBody>> {
+    let output = Command::new("pandoc")
+        .arg(path)
+        .arg("-f")
+        .arg("org")
+        .arg("-t")
+        .arg("html")
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    Some(html_response(String::from_utf8_lossy(&output.stdout).to_string()))
+}
+
+fn render_markdown(path: &PathBuf) -> Option<Response<RespBody>> {
+    let content = fs::read_to_string(path).ok()?;
+
+    let parser = Parser::new(&content);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+
+    let full = format!(
+        "<html><head><meta charset=\"utf-8\"></head><body>{}</body></html>",
+        html_output
+    );
+
+    Some(html_response(full))
+}
+
+
+fn render_if_needed(path: &PathBuf) -> Option<Response<RespBody>> {
+
+    eprint!("Checking if rendering needed for: {}\n", path.display());
+
+    match path.extension().and_then(OsStr::to_str) {
+        Some("md") => render_markdown(path),
+        Some("org") => render_org(path),
+        // Some("pdf") => render_pdf(path),
+        _ => None,
+    }
+}
