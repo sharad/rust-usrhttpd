@@ -74,10 +74,8 @@ fn merge(base: &mut HtAccess, new: &HtAccess) {
     base.require_ips.extend(new.require_ips.clone());
     base.proxy_pass.extend(new.proxy_pass.clone());
 
-    // NEW
-    if new.options_indexes.is_some() {
-        base.options_indexes = new.options_indexes;
-    }
+    base.options_indexes = new.options_indexes.or(base.options_indexes);
+    base.follow_symlinks = new.follow_symlinks.or(base.follow_symlinks);
 }
 
 

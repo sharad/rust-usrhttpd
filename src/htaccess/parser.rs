@@ -70,7 +70,17 @@ pub fn parse(contents: &str, base: &Path) -> HtAccess {
                         "-Indexes" | "-indexes" => {
                             h.options_indexes = Some(false);
                         }
-                        _ => {}
+                        _ => {
+                            // optionally log invalid config
+                        }
+                    }
+                }
+            }
+            Some("followsymlinks") => {
+                match parts.get(1).and_then(|v| v.parse::<usize>().ok()) {
+                    Some(n) => h.follow_symlinks = Some(n),
+                    None => {
+                        // optionally log invalid config
                     }
                 }
             }

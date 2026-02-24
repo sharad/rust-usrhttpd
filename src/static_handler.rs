@@ -9,20 +9,27 @@ use crate::htaccess::rules::HtAccess;
 
 pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody> {
     let requested = root.join(path.trim_start_matches('/'));
-
-    let p = match fs::canonicalize(&requested) {
-        Ok(v) if v.starts_with(root) => v,
-        _ => return resp(StatusCode::FORBIDDEN, "Forbidden"),
+    let levels = rules.follow_symlinks.unwrap_or(6);
+    let boundary = root
+        .ancestors()
+        .nth(levels)
+        .unwrap_or(&root)
+        .to_path_buf();
+    let boundary = match fs::canonicalize(&boundary) {
+        Ok(b) => b,
+        Err(_) => return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfiguration"),
     };
 
-    // if p.is_dir() {
-    //     if let Some(index) = find_index(&p) {
-    //         return serve_file(index);
-    //     }
-
-    //     return directory_listing(&p, path);
-    // }
-
+    let p = match fs::canonicalize(&requested) {
+        // Ok(v) if v.starts_with(root_parent) => v,
+        Ok(v) => {
+            if !v.starts_with(&boundary) {
+                return resp(StatusCode::FORBIDDEN, "Forbidden");
+            }
+            v
+        }
+        Err(_) => return resp(StatusCode::FORBIDDEN, "Forbidden"),
+    };
 
     // 🔹 If directory → try index files
     if p.is_dir() {

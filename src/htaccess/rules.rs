@@ -13,6 +13,7 @@ pub struct HtAccess {
 
     // NEW
     pub options_indexes: Option<bool>, // Some(true)=enabled, Some(false)=disabled
+    pub follow_symlinks: Option<usize>,
 }
 
 
