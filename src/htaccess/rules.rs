@@ -9,6 +9,10 @@ pub struct HtAccess {
     pub deny_ips: Vec<IpAddr>,
     pub require_ips: Vec<IpAddr>,
     pub proxy_pass: Vec<(String, String)>,
+
+
+    // NEW
+    pub options_indexes: Option<bool>, // Some(true)=enabled, Some(false)=disabled
 }
 
 

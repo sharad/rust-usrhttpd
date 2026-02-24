@@ -61,6 +61,19 @@ pub fn parse(contents: &str, base: &Path) -> HtAccess {
                     h.proxy_pass.push((prefix.to_string(), target.to_string()));
                 }
             }
+            Some("options") => {
+                if let Some(opt) = parts.get(1) {
+                    match *opt {
+                        "+Indexes" | "+indexes" => {
+                            h.options_indexes = Some(true);
+                        }
+                        "-Indexes" | "-indexes" => {
+                            h.options_indexes = Some(false);
+                        }
+                        _ => {}
+                    }
+                }
+            }
             _ => {}
         }
     }

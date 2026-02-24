@@ -40,8 +40,11 @@ enum HandlerResponse {
 }
 
 #[derive(Parser)]
+#[command(name = "usrhttpd")]
+#[command(about = "Small Rust .htaccess web server")]
 struct Args {
-    #[arg(short = 'r', long, default_value = "./public")]
+    // #[arg(short = 'r', long, default_value = "./public")]
+    #[arg(default_value = "./public")]
     root: String,
 
     #[arg(short = 'H', long, default_value = "127.0.0.1")]
@@ -313,7 +316,7 @@ async fn handle_request(
         let resp = proxy::reverse::forward_request(req, &target).await?;
         HandlerResponse::Proxy(resp)
     } else {
-        let resp = static_handler::serve(&root, &path);
+        let resp = static_handler::serve(&root, &path, &rules);
         HandlerResponse::Static(resp)
     };
 

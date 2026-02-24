@@ -73,6 +73,11 @@ fn merge(base: &mut HtAccess, new: &HtAccess) {
     base.deny_ips.extend(new.deny_ips.clone());
     base.require_ips.extend(new.require_ips.clone());
     base.proxy_pass.extend(new.proxy_pass.clone());
+
+    // NEW
+    if new.options_indexes.is_some() {
+        base.options_indexes = new.options_indexes;
+    }
 }
 
 
