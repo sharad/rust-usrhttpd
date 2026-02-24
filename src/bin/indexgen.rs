@@ -16,6 +16,10 @@ struct Args {
     /// Recurse into subdirectories
     #[arg(short = 'r', long)]
     recursive: bool,
+
+    /// Clobber
+    #[arg(short = 'c', long, default_value_t = false)]
+    clobber: bool,
 }
 
 fn main() {
@@ -29,16 +33,20 @@ fn main() {
     }
 
     if args.recursive {
-        generate_recursive(&root, "/");
+        generate_recursive(&root, "/", args.clobber);
     } else {
-        generate_single(&root, "/");
+        generate_single(&root, "/", args.clobber);
     }
 }
 
-fn generate_single(dir: &Path, uri_path: &str) {
+fn generate_single(dir: &Path, uri_path: &str, clobber: bool) {
+    let index_path = dir.join("index.html");
+    if index_path.exists() && !clobber {
+        eprintln!("Skipped {} (already exists)", index_path.display());
+        return;
+    }
     match generate_directory_html(&dir.to_path_buf(), uri_path) {
         Ok(html) => {
-            let index_path = dir.join("index.html");
             println!("Generating {}", index_path.display());
 
             if let Err(e) = fs::write(index_path, html) {
@@ -51,8 +59,8 @@ fn generate_single(dir: &Path, uri_path: &str) {
     }
 }
 
-fn generate_recursive(dir: &Path, uri_path: &str) {
-    generate_single(dir, uri_path);
+fn generate_recursive(dir: &Path, uri_path: &str, clobber: bool) {
+    generate_single(dir, uri_path, clobber);
 
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
@@ -71,7 +79,7 @@ fn generate_recursive(dir: &Path, uri_path: &str) {
                 format!("{}/{}", uri_path, name)
             };
 
-            generate_recursive(&path, &new_uri);
+            generate_recursive(&path, &new_uri, clobber);
         }
     }
 }
