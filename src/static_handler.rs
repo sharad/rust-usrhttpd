@@ -95,11 +95,9 @@ fn serve_file(path: PathBuf) -> Response<RespBody> {
     }
 }
 
-fn directory_listing(dir: &PathBuf, uri_path: &str) -> Response<RespBody> {
-    let mut entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return resp(StatusCode::FORBIDDEN, "Forbidden"),
-    };
+
+pub fn generate_directory_html(dir: &PathBuf, uri_path: &str) -> Result<String, std::io::Error> {
+    let mut entries = fs::read_dir(dir)?;
 
     let mut html = String::new();
 
@@ -152,16 +150,41 @@ fn directory_listing(dir: &PathBuf, uri_path: &str) -> Response<RespBody> {
 
     html.push_str("</ul><hr></body></html>");
 
-    let mut r = Response::new(
-        Full::new(Bytes::from(html))
-            .map_err(|never| match never {})
-            .boxed()
-    );
+    Ok(html)
+}
 
-    r.headers_mut()
-        .insert("content-type", "text/html".parse().unwrap());
 
-    r
+fn directory_listing(dir: &PathBuf, uri_path: &str) -> Response<RespBody> {
+
+
+    match generate_directory_html(dir, uri_path) {
+        Ok(html) => {
+            let mut r = Response::new(
+                Full::new(Bytes::from(html))
+                    .map_err(|never| match never {})
+                    .boxed()
+            );
+
+            r.headers_mut()
+                .insert("content-type", "text/html".parse().unwrap());
+
+            r
+        }
+        Err(_) => resp(StatusCode::FORBIDDEN, "Forbidden"),
+    }
+
+
+    // let html = generate_directory_html(dir, uri_path);
+    // let mut r = Response::new(
+    //     Full::new(Bytes::from(html))
+    //         .map_err(|never| match never {})
+    //         .boxed()
+    // );
+
+    // r.headers_mut()
+    //     .insert("content-type", "text/html".parse().unwrap());
+
+    // r
 }
 
 
