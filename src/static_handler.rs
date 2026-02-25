@@ -21,7 +21,10 @@ pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody
         .to_path_buf();
     let boundary = match fs::canonicalize(&boundary) {
         Ok(b) => b,
-        Err(_) => return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfiguration"),
+        Err(e) => {
+            eprintln!("Root canonicalize failed: {}", e);
+            return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfiguration")
+        },
     };
 
     eprintln!("root: {}", root.display());
@@ -36,7 +39,12 @@ pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody
             // }
             v
         }
-        Err(_) => return resp(StatusCode::FORBIDDEN, "Forbidden"),
+
+
+        Err(e) => {
+            eprintln!("Request canonicalize failed: {}", e);
+            return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfiguration")
+        },
     };
 
     // 🔹 If directory → try index files
@@ -90,7 +98,10 @@ fn serve_file(path: PathBuf) -> Response<RespBody> {
 
                 r
             }
-            Err(_) => resp(StatusCode::NOT_FOUND, "Not Found"),
+            Err(e) => {
+                eprintln!("Reading failed: {}", e);
+                resp(StatusCode::NOT_FOUND, "Not Found")
+            },
         }
     }
 }
