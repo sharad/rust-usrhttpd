@@ -33,19 +33,19 @@ fn main() {
     }
 
     if args.recursive {
-        generate_recursive(&root, "/", args.clobber);
+        generate_recursive(&root, args.clobber);
     } else {
-        generate_single(&root, "/", args.clobber);
+        generate_single(&root, args.clobber);
     }
 }
 
-fn generate_single(dir: &Path, uri_path: &str, clobber: bool) {
+fn generate_single(dir: &Path, clobber: bool) {
     let index_path = dir.join("index.html");
     if index_path.exists() && !clobber {
         eprintln!("Skipped {} (already exists)", index_path.display());
         return;
     }
-    match generate_directory_html(&dir.to_path_buf(), uri_path) {
+    match generate_directory_html(&dir.to_path_buf()) {
         Ok(html) => {
             println!("Generating {}", index_path.display());
 
@@ -59,8 +59,8 @@ fn generate_single(dir: &Path, uri_path: &str, clobber: bool) {
     }
 }
 
-fn generate_recursive(dir: &Path, uri_path: &str, clobber: bool) {
-    generate_single(dir, uri_path, clobber);
+fn generate_recursive(dir: &Path, clobber: bool) {
+    generate_single(dir, clobber);
 
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
@@ -70,16 +70,7 @@ fn generate_recursive(dir: &Path, uri_path: &str, clobber: bool) {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-
-            let new_uri = if uri_path == "/" {
-                format!("/{}", name)
-            } else {
-                format!("{}/{}", uri_path, name)
-            };
-
-            generate_recursive(&path, &new_uri, clobber);
+            generate_recursive(&path, clobber);
         }
     }
 }

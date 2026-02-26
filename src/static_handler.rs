@@ -60,7 +60,7 @@ pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody
             return resp(StatusCode::FORBIDDEN, "Directory listing denied");
         }
 
-        return directory_listing(&p, path);
+        return directory_listing(&p);
     }
 
     // 🔹 Normal file
@@ -107,37 +107,21 @@ fn serve_file(path: PathBuf) -> Response<RespBody> {
 }
 
 
-pub fn generate_directory_html(dir: &PathBuf, uri_path: &str) -> Result<String, std::io::Error> {
+pub fn generate_directory_html(dir: &PathBuf) -> Result<String, std::io::Error> {
     let mut entries = fs::read_dir(dir)?;
 
     let mut html = String::new();
 
+    let dirname = dir.file_name().and_then(OsStr::to_str).unwrap_or("/");
+
     html.push_str("<html><head><title>Index of ");
-    html.push_str(uri_path);
+    html.push_str(dirname);
     html.push_str("</title></head><body>");
     html.push_str("<h1>Index of ");
-    html.push_str(uri_path);
+    html.push_str(dirname);
     html.push_str("</h1><hr><ul>");
 
-    // ----------------------------
-    // Parent directory link
-    // ----------------------------
-    if uri_path != "/" {
-        let parent = if uri_path.ends_with('/') {
-            uri_path.trim_end_matches('/')
-        } else {
-            uri_path
-        };
-
-        let parent = match parent.rfind('/') {
-            Some(0) | None => "/",
-            Some(pos) => &parent[..pos + 1],
-        };
-
-        html.push_str("<li><a href=\"");
-        html.push_str(parent);
-        html.push_str("\">../</a></li>");
-    }
+    html.push_str("<li><a href=\"..\">../</a></li>");
 
     // ----------------------------
     // Directory entries
@@ -165,10 +149,10 @@ pub fn generate_directory_html(dir: &PathBuf, uri_path: &str) -> Result<String, 
 }
 
 
-fn directory_listing(dir: &PathBuf, uri_path: &str) -> Response<RespBody> {
+fn directory_listing(dir: &PathBuf) -> Response<RespBody> {
 
 
-    match generate_directory_html(dir, uri_path) {
+    match generate_directory_html(dir) {
         Ok(html) => {
             let mut r = Response::new(
                 Full::new(Bytes::from(html))
@@ -183,19 +167,6 @@ fn directory_listing(dir: &PathBuf, uri_path: &str) -> Response<RespBody> {
         }
         Err(_) => resp(StatusCode::FORBIDDEN, "Forbidden"),
     }
-
-
-    // let html = generate_directory_html(dir, uri_path);
-    // let mut r = Response::new(
-    //     Full::new(Bytes::from(html))
-    //         .map_err(|never| match never {})
-    //         .boxed()
-    // );
-
-    // r.headers_mut()
-    //     .insert("content-type", "text/html".parse().unwrap());
-
-    // r
 }
 
 
