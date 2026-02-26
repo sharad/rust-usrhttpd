@@ -130,6 +130,10 @@ pub fn generate_directory_html(dir: &PathBuf) -> Result<String, std::io::Error> 
         let name = entry.file_name();
         let name = name.to_string_lossy();
 
+        if name  == "index.html" {
+            continue;
+        }
+
         let display = if entry.path().is_dir() {
             format!("{}/", name)
         } else {
