@@ -7,6 +7,7 @@ use http_body_util::{Full, BodyExt};
 use std::ffi::OsStr;
 use std::process::Command;
 use pulldown_cmark::{Parser, html};
+use urlencoding::encode;
 
 use crate::types::RespBody;
 use crate::htaccess::rules::HtAccess;
@@ -121,7 +122,7 @@ pub fn generate_directory_html(dir: &PathBuf) -> Result<String, std::io::Error> 
     html.push_str(dirname);
     html.push_str("</h1><hr><ul>");
 
-    html.push_str("<li><a href=\"..\">../</a></li>");
+    html.push_str("<li style=\"white-space: pre\"><a href=\"..\">../</a></li>");
 
     // ----------------------------
     // Directory entries
@@ -140,8 +141,10 @@ pub fn generate_directory_html(dir: &PathBuf) -> Result<String, std::io::Error> 
             name.to_string()
         };
 
+        let href = encode(&display);
+
         html.push_str("<li><a href=\"");
-        html.push_str(&display);
+        html.push_str(&href);
         html.push_str("\">");
         html.push_str(&display);
         html.push_str("</a></li>");
