@@ -7,13 +7,13 @@ use std::io::Write;
 use crate::types::RespBody;
 
 pub async fn compress(resp: Response<RespBody>) -> Response<RespBody> {
-    let (parts, body) = resp.into_parts();
+
+    let (mut parts, body) = resp.into_parts();
 
     let collected = body.collect().await;
     let data = match collected {
         Ok(c) => c.to_bytes(),
         Err(_) => {
-            // If we fail to collect, just return empty body safely
             return Response::from_parts(
                 parts,
                 Full::new(Bytes::new()).map_err(|never| match never {}).boxed(),
@@ -25,16 +25,26 @@ pub async fn compress(resp: Response<RespBody>) -> Response<RespBody> {
     encoder.write_all(&data).unwrap();
     let compressed = encoder.finish().unwrap();
 
-    let mut new_resp = Response::from_parts(
-        parts,
-        Full::new(Bytes::from(compressed)).map_err(|never| match never {}).boxed(),
-    );
+    // remove old content-length
+    parts.headers.remove(hyper::header::CONTENT_LENGTH);
 
-    new_resp.headers_mut().insert(
-        "Content-Encoding",
+    // add gzip encoding
+    parts.headers.insert(
+        hyper::header::CONTENT_ENCODING,
         "gzip".parse().unwrap(),
     );
 
-    new_resp
+    // set correct length
+    parts.headers.insert(
+        hyper::header::CONTENT_LENGTH,
+        compressed.len().to_string().parse().unwrap(),
+    );
+
+    Response::from_parts(
+        parts,
+        Full::new(Bytes::from(compressed))
+            .map_err(|never| match never {})
+            .boxed(),
+    )
 }
 

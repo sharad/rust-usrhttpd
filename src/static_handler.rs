@@ -1,18 +1,26 @@
 
 use hyper::{Response, StatusCode};
 use bytes::Bytes;
-use mime_guess::from_path;
+use mime_guess;
 use std::{path::PathBuf, fs};
-use http_body_util::{Full, BodyExt};
+// use http_body_util::{Full, BodyExt};
+use http_body_util::{StreamBody, BodyExt, Full};
 use std::ffi::OsStr;
 use std::process::Command;
 use pulldown_cmark::{Parser, html};
 use urlencoding::encode;
 
+use tokio::fs::File;
+use tokio_util::io::ReaderStream;
+// use http_body_util::StreamBody;
+use http_body::Frame;
+// use futures_util::StreamExt;
+use futures_util::StreamExt as _;
+
 use crate::types::RespBody;
 use crate::htaccess::rules::HtAccess;
 
-pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody> {
+pub async fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody> {
     let requested = root.join(path.trim_start_matches('/'));
     let levels = rules.follow_symlinks.unwrap_or(10);
     let boundary = root
@@ -51,7 +59,7 @@ pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody
     // 🔹 If directory → try index files
     if p.is_dir() {
         if let Some(index) = find_index(&p) {
-            return serve_file(index);
+            return serve_file(index).await;
         }
 
         // Directory listing control via htaccess
@@ -65,7 +73,7 @@ pub fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody
     }
 
     // 🔹 Normal file
-    serve_file(p)
+    serve_file(p).await
 }
 
 fn find_index(dir: &PathBuf) -> Option<PathBuf> {
@@ -79,34 +87,64 @@ fn find_index(dir: &PathBuf) -> Option<PathBuf> {
     None
 }
 
-fn serve_file(path: PathBuf) -> Response<RespBody> {
+async fn serve_file(path: PathBuf) -> Response<RespBody> {
 
     if let Some(resp) = render_if_needed(&path) {
-        resp
-    } else {
-        match fs::read(&path) {
-            Ok(bytes) => {
-                let mime = from_path(&path).first_or_octet_stream();
+        return resp;
+    }
 
-                let mut r = Response::new(
-                    Full::new(Bytes::from(bytes))
-                        .map_err(|never| match never {})
-                        .boxed()
-                );
+    match File::open(&path).await {
+        Ok(file) => {
 
-                r.headers_mut()
-                    .insert("content-type", mime.to_string().parse().unwrap());
+            let size = match file.metadata().await {
+                Ok(m) => m.len(),
+                Err(_) => 0
+            };
 
-                r
-            }
-            Err(e) => {
-                eprintln!("Reading failed: {}", e);
-                resp(StatusCode::NOT_FOUND, "Not Found")
-            },
+            let mime = mime_guess::from_path(&path).first_or_octet_stream();
+
+            let stream = ReaderStream::new(file)
+                .map(|result| Ok(Frame::data(result.unwrap())));
+
+            let body = BodyExt::boxed(StreamBody::new(stream));
+
+
+            let mut resp = Response::new(body);
+
+            // set content type
+            resp.headers_mut().insert(
+                hyper::header::CONTENT_TYPE,
+                mime.to_string().parse().unwrap()
+            );
+
+            // // ADD CONTENT LENGTH HERE
+            // if size > 0 {
+            //     resp.headers_mut().insert(
+            //         hyper::header::CONTENT_LENGTH,
+            //         size.to_string().parse().unwrap()
+            //     );
+            // }
+
+            resp.headers_mut().insert(
+                hyper::header::CONTENT_LENGTH,
+                size.to_string().parse().unwrap()
+            );
+
+            // resp.headers_mut().insert(
+            //     hyper::header::ACCEPT_RANGES,
+            //     "bytes".parse().unwrap()
+            // );
+
+            resp
         }
+
+        Err(e) => {
+            eprintln!("Reading failed: {}", e);
+            resp(StatusCode::NOT_FOUND, "Not Found")
+        }
+
     }
 }
-
 
 pub fn generate_directory_html(dir: &PathBuf) -> Result<String, std::io::Error> {
     let mut entries = fs::read_dir(dir)?;
@@ -134,16 +172,14 @@ pub fn generate_directory_html(dir: &PathBuf) -> Result<String, std::io::Error> 
         if name  == "index.html" {
             continue;
         }
+        let mut display = name.to_string();
+        let mut href = encode(&display).to_string();
+        if entry.path().is_dir() {
+            href.push('/');
+            display.push('/')
+        }
 
-        let display = if entry.path().is_dir() {
-            format!("{}/", name)
-        } else {
-            name.to_string()
-        };
-
-        let href = encode(&display);
-
-        html.push_str("<li><a href=\"");
+        html.push_str("<li style=\"white-space: pre\"><a href=\"");
         html.push_str(&href);
         html.push_str("\">");
         html.push_str(&display);

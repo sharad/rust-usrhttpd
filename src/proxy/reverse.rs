@@ -32,6 +32,7 @@ pub async fn forward_request(
 
     // Convert body to BoxBody
     Ok(resp.map(|b| b.boxed()))
+    // Ok(resp.map(|b| b.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)).boxed()))
 }
 
 

@@ -47,6 +47,14 @@ pub async fn handle(
     // Must be 101
     if backend_resp.status() != StatusCode::SWITCHING_PROTOCOLS {
         return Ok(backend_resp.map(|b| b.boxed()));
+
+        // return Ok(
+        //     backend_resp.map(|b| {
+        //         b.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        //             .boxed()
+        //     })
+        // );
+
     }
 
     // Capture backend upgrade
@@ -66,6 +74,13 @@ pub async fn handle(
 
     // Return backend 101 to client
     Ok(backend_resp.map(|b| b.boxed()))
+
+    // Ok(
+    //     backend_resp.map(|b| {
+    //         b.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    //             .boxed()
+    //     })
+    // )
 }
 
 

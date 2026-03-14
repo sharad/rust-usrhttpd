@@ -30,6 +30,7 @@ use std::fs::File;
 use std::io::BufReader;
 
 use hyper::service::service_fn;
+use urlencoding::decode;
 
 use crate::types::RespBody;
 use crate::proxy::websocket::is_websocket_request;
@@ -279,7 +280,12 @@ async fn handle_request(
 
     log.log(&req, remote);
 
-    let path = req.uri().path().to_string();
+    let raw_path = req.uri().path();
+
+
+    let path = decode(raw_path)
+        .expect("UTF-8 decoding failed")
+        .to_string();
 
     // Resolve .htaccess rules
     let rules = htaccess::resolver::resolve(&root, &path, &cache).await;
@@ -312,16 +318,45 @@ async fn handle_request(
             return Ok(resp);
         }
 
-        // let resp = proxy::reverse::forward_request(req, &target).await?;
         let resp = proxy::reverse::forward_request(req, &target).await?;
         HandlerResponse::Proxy(resp)
     } else {
-        let resp = static_handler::serve(&root, &path, &rules);
+        let resp = static_handler::serve(&root, &path, &rules).await;
         HandlerResponse::Static(resp)
     };
 
     let response = match handler {
         HandlerResponse::Static(resp) => {
+
+            // Don't gzip already compressed media like video
+            let is_video = resp
+                .headers()
+                .get(hyper::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .map(|ct| ct.starts_with("video/"))
+                .unwrap_or(false);
+
+
+            let ct = resp
+                .headers()
+                .get(hyper::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+
+            let skip_gzip =
+                ct.starts_with("video/")
+                || ct.starts_with("audio/")
+                || ct.starts_with("image/")
+                || ct.contains("zip");
+
+
+            if is_video || skip_gzip {
+                return Ok(resp);
+            }
+
+
+
+
             if let Some(enc) = accept_encoding {
                 if enc.contains("gzip") {
                     gzip::compress(resp).await
