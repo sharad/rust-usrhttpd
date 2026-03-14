@@ -118,22 +118,22 @@ async fn serve_file(path: PathBuf) -> Response<RespBody> {
             );
 
             // // ADD CONTENT LENGTH HERE
-            // if size > 0 {
-            //     resp.headers_mut().insert(
-            //         hyper::header::CONTENT_LENGTH,
-            //         size.to_string().parse().unwrap()
-            //     );
-            // }
-
-            resp.headers_mut().insert(
-                hyper::header::CONTENT_LENGTH,
-                size.to_string().parse().unwrap()
-            );
+            if size > 0 {
+                resp.headers_mut().insert(
+                    hyper::header::CONTENT_LENGTH,
+                    size.to_string().parse().unwrap()
+                );
+            }
 
             // resp.headers_mut().insert(
-            //     hyper::header::ACCEPT_RANGES,
-            //     "bytes".parse().unwrap()
+            //     hyper::header::CONTENT_LENGTH,
+            //     size.to_string().parse().unwrap()
             // );
+
+            resp.headers_mut().insert(
+                hyper::header::ACCEPT_RANGES,
+                "bytes".parse().unwrap()
+            );
 
             resp
         }
