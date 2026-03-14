@@ -76,6 +76,21 @@ fn merge(base: &mut HtAccess, new: &HtAccess) {
 
     base.options_indexes = new.options_indexes.or(base.options_indexes);
     base.follow_symlinks = new.follow_symlinks.or(base.follow_symlinks);
+
+    if !new.allowed_dirs.is_empty() {
+        base.allowed_dirs.clear();
+        // base.allowed_dirs = new.allowed_dirs;
+        base.allowed_dirs.extend(new.allowed_dirs.iter().cloned());
+    }
+
+    // // extend -- base.allowed_dirs.extend(new.allowed_dirs);
+    // for d in new.allowed_dirs {
+    //     if !base.allowed_dirs.contains(&d) {
+    //         base.allowed_dirs.push(d);
+    //     }
+    // }
+
+
 }
 
 

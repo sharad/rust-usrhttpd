@@ -16,44 +16,82 @@ use tokio_util::io::ReaderStream;
 use http_body::Frame;
 // use futures_util::StreamExt;
 use futures_util::StreamExt as _;
+// use log::{info, warn, error, debug};
+use tracing::{info, warn, error, debug};
 
 use crate::types::RespBody;
 use crate::htaccess::rules::HtAccess;
 
 pub async fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody> {
     let requested = root.join(path.trim_start_matches('/'));
-    let levels = rules.follow_symlinks.unwrap_or(10);
-    let boundary = root
-        .ancestors()
-        .nth(levels)
-        .unwrap_or(&root)
-        .to_path_buf();
-    let boundary = match fs::canonicalize(&boundary) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("Root canonicalize failed: {}", e);
-            return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfiguration")
-        },
+
+    // let levels = rules.follow_symlinks.unwrap_or(10);
+    // let boundary = root
+    //     .ancestors()
+    //     .nth(levels)
+    //     .unwrap_or(&root)
+    //     .to_path_buf();
+    // let boundary = match fs::canonicalize(&boundary) {
+    //     Ok(b) => b,
+    //     Err(e) => {
+    //         info!("Root canonicalize failed: {}", e);
+    //         return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfiguration")
+    //     },
+    // };
+
+    let allowed_roots = if rules.allowed_dirs.is_empty() {
+        vec![fs::canonicalize(root).unwrap()]
+    } else {
+        rules.allowed_dirs
+            .iter()
+            .filter_map(|d| fs::canonicalize(d).ok())
+            .collect()
     };
 
-    eprintln!("root: {}", root.display());
-    eprint!("Serving static: boundary={}\n", boundary.display());
+    info!("---- Allowed Roots ----");
+    for r in &allowed_roots {
+        info!("{}", r.display());
+    }
+    info!("-----------------------");
+
+
+    info!("root: {}", root.display());
+    // info!("Serving static: boundary={}\n", boundary.display());
+
+    // info!(client = %remote, path = %path, "Incoming request");
 
     let p = match fs::canonicalize(&requested) {
         Ok(v) => {
-            eprint!("Serving static: requested={}\n", requested.display());
-            eprintln!("Resolved path: {:?}\n", v);
-            // if !v.starts_with(&boundary) {
-            //     return resp(StatusCode::FORBIDDEN, "Forbidden");
-            // }
+            info!("Serving static: requested={}\n", requested.display());
+            // info!("Resolved path: {:?}\n", v);
+            info!("Resolved path: {}", v.display());
+
+            info!(path = %v.display(), "Serving file");
+
+            if !allowed_roots.iter().any(|r| v.starts_with(r)) {
+                return resp(StatusCode::FORBIDDEN, "Forbidden");
+            }
+
             v
         }
 
-
         Err(e) => {
-            eprintln!("Request canonicalize failed: {}", e);
-            return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfiguration")
-        },
+            use std::io::ErrorKind;
+
+            info!("Request canonicalize failed: {}", e);
+
+            match e.kind() {
+                ErrorKind::NotFound => {
+                    return resp(StatusCode::NOT_FOUND, "Not Found");
+                }
+                ErrorKind::PermissionDenied => {
+                    return resp(StatusCode::FORBIDDEN, "Forbidden");
+                }
+                _ => {
+                    return resp(StatusCode::INTERNAL_SERVER_ERROR, "Server error");
+                }
+            }
+        }
     };
 
     // 🔹 If directory → try index files
@@ -134,7 +172,7 @@ async fn serve_file(path: PathBuf) -> Response<RespBody> {
         }
 
         Err(e) => {
-            eprintln!("Reading failed: {}", e);
+            info!("Reading failed: {}", e);
             resp(StatusCode::NOT_FOUND, "Not Found")
         }
 
@@ -285,7 +323,7 @@ fn render_markdown(path: &PathBuf) -> Option<Response<RespBody>> {
 
 fn render_if_needed(path: &PathBuf) -> Option<Response<RespBody>> {
 
-    eprint!("Checking if rendering needed for: {}\n", path.display());
+    info!("Checking if rendering needed for: {}\n", path.display());
 
     match path.extension().and_then(OsStr::to_str) {
         Some("md") => render_markdown(path),

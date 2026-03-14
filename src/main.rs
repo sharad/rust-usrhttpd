@@ -31,6 +31,8 @@ use std::io::BufReader;
 
 use hyper::service::service_fn;
 use urlencoding::decode;
+// use env_logger;
+use tracing_subscriber;
 
 use crate::types::RespBody;
 use crate::proxy::websocket::is_websocket_request;
@@ -66,6 +68,8 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // env_logger::init();
+    tracing_subscriber::fmt::init();
     let args = Args::parse();
 
     let root = std::fs::canonicalize(&args.root)?;

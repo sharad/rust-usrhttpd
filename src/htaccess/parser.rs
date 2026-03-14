@@ -84,6 +84,20 @@ pub fn parse(contents: &str, base: &Path) -> HtAccess {
                     }
                 }
             }
+            Some("alloweddirs") => {
+                for dir in parts.iter().skip(1) {
+                    let p = PathBuf::from(dir);
+
+                    let full = if p.is_relative() {
+                        base.join(p)
+                    } else {
+                        p
+                    };
+
+                    h.allowed_dirs.push(full);
+                }
+            }
+
             _ => {}
         }
     }
