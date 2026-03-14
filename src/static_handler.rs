@@ -125,11 +125,6 @@ async fn serve_file(path: PathBuf) -> Response<RespBody> {
                 );
             }
 
-            // resp.headers_mut().insert(
-            //     hyper::header::CONTENT_LENGTH,
-            //     size.to_string().parse().unwrap()
-            // );
-
             resp.headers_mut().insert(
                 hyper::header::ACCEPT_RANGES,
                 "bytes".parse().unwrap()
