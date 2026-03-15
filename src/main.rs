@@ -315,15 +315,15 @@ async fn handle_request(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    let handler = if let Some(target) = proxy::match_proxy(&rules, &path) {
+    let handler = if let Some((prefix, template)) = proxy::match_proxy(&rules, &path) {
 
         // --- WebSocket detection ---
         if is_websocket_request(&req) {
-            let resp = proxy::websocket::handle(req, target).await?;
+            let resp = proxy::websocket::handle(req, template).await?;
             return Ok(resp);
         }
 
-        let resp = proxy::reverse::forward_request(req, &target).await?;
+        let resp = proxy::reverse::forward_request(req, &prefix, &template).await?;
         HandlerResponse::Proxy(resp)
     } else {
         let resp = static_handler::serve(&root, &path, &rules).await;

@@ -9,11 +9,32 @@ use crate::types::RespBody;
 
 pub async fn forward_request(
     mut req: Request<Incoming>,
-    target: &str,
+    prefix: &str,
+    template: &str,
 ) -> Result<Response<RespBody>, hyper::Error> {
 
-    // Rewrite URI to backend target
+    // // Rewrite URI to backend target
+    // *req.uri_mut() = target.parse().unwrap();
+
+
+
+    let uri = req.uri().clone();
+    let path = uri.path();
+
+    let remainder = path.strip_prefix(prefix).unwrap_or("");
+
+    let mut target = template.replace("%s", remainder);
+
+    // if template does not contain query but request has query
+    if !target.contains('?') {
+        if let Some(q) = uri.query() {
+            target.push('?');
+            target.push_str(q);
+        }
+    }
+
     *req.uri_mut() = target.parse().unwrap();
+
 
     let connector = HttpConnector::new();
     let client: Client<_, Incoming> =
