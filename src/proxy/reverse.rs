@@ -3,6 +3,7 @@ use hyper::body::Incoming;
 use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
 use http_body_util::BodyExt;
+use tracing::{info, warn, error, debug};
 
 use crate::types::RespBody;
 
@@ -21,7 +22,7 @@ pub async fn forward_request(
     let resp = match client.request(req).await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Proxy error: {}", e);
+            info!("Proxy error: {}", e);
 
             return Ok(Response::builder()
                       .status(502)

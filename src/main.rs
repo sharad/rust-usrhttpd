@@ -33,6 +33,7 @@ use hyper::service::service_fn;
 use urlencoding::decode;
 // use env_logger;
 use tracing_subscriber;
+use tracing::{info, warn, error, debug};
 
 use crate::types::RespBody;
 use crate::proxy::websocket::is_websocket_request;
@@ -113,7 +114,7 @@ async fn main() -> Result<()> {
                         let io = TokioIo::new(tls_stream);
                         serve_connection_with_options(io, service).await;
                     }
-                    Err(e) => eprintln!("TLS error: {}", e),
+                    Err(e) => info!("TLS error: {}", e),
                 }
             } else {
                 let io = TokioIo::new(stream);
@@ -149,7 +150,7 @@ async fn main() -> Result<()> {
 //     };
 
 //     if let Err(e) = conn.await {
-//         eprintln!("Connection error: {}", e);
+//         info!("Connection error: {}", e);
 //     }
 // }
 
@@ -176,7 +177,7 @@ async fn main() -> Result<()> {
 //     }
 
 //     if let Err(e) = builder.serve_connection(io, service).await {
-//         eprintln!("Connection error: {}", e);
+//         info!("Connection error: {}", e);
 //     }
 // }
 
@@ -206,7 +207,7 @@ async fn main() -> Result<()> {
 //     };
 
 //     if let Err(e) = conn.await {
-//         eprintln!("Connection error: {}", e);
+//         info!("Connection error: {}", e);
 //     }
 // }
 
@@ -240,7 +241,7 @@ async fn main() -> Result<()> {
 //     };
 
 //     if let Err(e) = conn.await {
-//         eprintln!("Connection error: {}", e);
+//         info!("Connection error: {}", e);
 //     }
 // }
 
@@ -269,7 +270,7 @@ where
         .with_upgrades()
         .await
     {
-        eprintln!("Connection error: {}", e);
+        info!("Connection error: {}", e);
     }
 }
 

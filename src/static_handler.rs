@@ -56,14 +56,14 @@ pub async fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<Re
 
 
     info!("root: {}", root.display());
-    // info!("Serving static: boundary={}\n", boundary.display());
+    // info!("Serving static: boundary={}", boundary.display());
 
     // info!(client = %remote, path = %path, "Incoming request");
 
     let p = match fs::canonicalize(&requested) {
         Ok(v) => {
-            info!("Serving static: requested={}\n", requested.display());
-            // info!("Resolved path: {:?}\n", v);
+            info!("Serving static: requested={}", requested.display());
+            // info!("Resolved path: {:?}", v);
             info!("Resolved path: {}", v.display());
 
             info!(path = %v.display(), "Serving file");
@@ -323,7 +323,7 @@ fn render_markdown(path: &PathBuf) -> Option<Response<RespBody>> {
 
 fn render_if_needed(path: &PathBuf) -> Option<Response<RespBody>> {
 
-    info!("Checking if rendering needed for: {}\n", path.display());
+    info!("Checking if rendering needed for: {}", path.display());
 
     match path.extension().and_then(OsStr::to_str) {
         Some("md") => render_markdown(path),

@@ -6,6 +6,8 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use http_body_util::BodyExt;
 use tokio::io::copy_bidirectional;
 
+use tracing::{info, warn, error, debug};
+
 use crate::types::RespBody;
 
 pub fn is_websocket_request(req: &Request<Incoming>) -> bool {
@@ -35,7 +37,7 @@ pub async fn handle(
     let mut backend_resp = match client.request(req).await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("WebSocket backend error: {}", e);
+            info!("WebSocket backend error: {}", e);
 
             return Ok(Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
