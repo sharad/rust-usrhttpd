@@ -89,8 +89,7 @@ fn merge(base: &mut HtAccess, new: &HtAccess) {
     //         base.allowed_dirs.push(d);
     //     }
     // }
-
-
+    base.rewrite_rules.extend(new.rewrite_rules.clone());
 }
 
 
