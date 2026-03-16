@@ -287,7 +287,7 @@ async fn handle_request(
 
     let raw_path = req.uri().path();
 
-    let path = decode(raw_path)
+    let mut path = decode(raw_path)
         .expect("UTF-8 decoding failed")
         .to_string();
 
@@ -307,9 +307,15 @@ async fn handle_request(
     // Resolve .htaccess rules
     let rules = htaccess::resolver::resolve(&root, &rewritten_path, &cache).await;
 
-    for (pattern, target) in &rules.rewrite_rules {
-        if pattern == "^$" && rewritten_path == "/" {
-            rewritten_path = format!("/{}", target);
+    // for (pattern, target) in &rules.rewrite_rules {
+    //     if pattern == "^$" && rewritten_path == "/" {
+    //         rewritten_path = format!("/{}", target);
+    //         break;
+    //     }
+    // }
+    for (re, target) in &rules.rewrite_rules {
+        if re.is_match(&path) {
+            path = re.replace(&path, target.as_str()).to_string();
             break;
         }
     }
@@ -337,7 +343,7 @@ async fn handle_request(
 
 
 
-    let handler = if let Some((prefix, template)) = proxy::match_proxy(&rules, &rewritten_path) {
+    let handler = if let Some((prefix, template)) = proxy::match_proxy(&rules, &path) {
 
         // --- WebSocket detection ---
         if is_websocket_request(&req) {
@@ -348,7 +354,7 @@ async fn handle_request(
         let resp = proxy::reverse::forward_request(req, &prefix, &template, remote).await?;
         HandlerResponse::Proxy(resp)
     } else {
-        let resp = static_handler::serve(&root, &rewritten_path, &rules).await;
+        let resp = static_handler::serve(&root, &path, &rules).await;
         HandlerResponse::Static(resp)
     };
 
@@ -397,7 +403,7 @@ async fn handle_request(
         },
     };
 
-    info!(path = %rewritten_path, status = %response.status(), "Request handled");
+    info!(path = %path, status = %response.status(), "Request handled");
     Ok(response)
 }
 

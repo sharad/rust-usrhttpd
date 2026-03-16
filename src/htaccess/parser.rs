@@ -1,5 +1,7 @@
-use super::rules::HtAccess;
+use regex::Regex;
 use std::{net::IpAddr, path::{Path, PathBuf}};
+
+use super::rules::HtAccess;
 
 pub fn parse(contents: &str, base: &Path) -> HtAccess {
     let mut h = HtAccess::default();
@@ -98,9 +100,10 @@ pub fn parse(contents: &str, base: &Path) -> HtAccess {
                 }
             }
             Some("rewriterule") => {
-                // RewriteRule ^$ tree
                 if let (Some(pattern), Some(target)) = (parts.get(1), parts.get(2)) {
-                    h.rewrite_rules.push((pattern.to_string(), target.to_string()));
+                    if let Ok(re) = Regex::new(pattern) {
+                        h.rewrite_rules.push((re, target.to_string()));
+                    }
                 }
             }
 

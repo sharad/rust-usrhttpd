@@ -1,4 +1,5 @@
 use std::{net::IpAddr, path::PathBuf};
+use regex::Regex;
 
 #[derive(Debug, Clone, Default)]
 pub struct HtAccess {
@@ -16,7 +17,7 @@ pub struct HtAccess {
     pub follow_symlinks: Option<usize>,
     pub allowed_dirs: Vec<PathBuf>,
 
-    pub rewrite_rules: Vec<(String, String)>,
+    pub rewrite_rules: Vec<(Regex, String)>,
 }
 
 
