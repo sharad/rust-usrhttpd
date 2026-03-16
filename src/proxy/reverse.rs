@@ -1,7 +1,12 @@
+
+
 use hyper::{Request, Response};
 use hyper::body::Incoming;
 use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
+use hyper::header::HOST;
+use hyper::http::Uri;
+use hyper::header::{HeaderName, HeaderValue};
 use http_body_util::BodyExt;
 use tracing::{info, warn, error, debug};
 
@@ -11,17 +16,14 @@ pub async fn forward_request(
     mut req: Request<Incoming>,
     prefix: &str,
     template: &str,
+    remote: std::net::SocketAddr,
 ) -> Result<Response<RespBody>, hyper::Error> {
-
-    // // Rewrite URI to backend target
-    // *req.uri_mut() = target.parse().unwrap();
-
-
-
     let uri = req.uri().clone();
     let path = uri.path();
 
     let remainder = path.strip_prefix(prefix).unwrap_or("");
+
+    info!(prefix = %prefix, path = %path, remainder = %remainder, template = %template, "forwarding request");
 
     let mut target = template.replace("%s", remainder);
 
@@ -33,12 +35,62 @@ pub async fn forward_request(
         }
     }
 
-    *req.uri_mut() = target.parse().unwrap();
+    info!(prefix = %prefix, target = %target, "proxying request");
+
+    // *req.uri_mut() = target.parse().unwrap();
+
+
+    let backend_uri: Uri = target.parse().unwrap();
+    let mut parts = req.uri().clone().into_parts();
+    parts.scheme = backend_uri.scheme().cloned();
+    parts.authority = backend_uri.authority().cloned();
+    parts.path_and_query = backend_uri.path_and_query().cloned();
+    *req.uri_mut() = Uri::from_parts(parts).unwrap();
 
 
     let connector = HttpConnector::new();
     let client: Client<_, Incoming> =
         Client::builder(TokioExecutor::new()).build(connector);
+
+
+
+
+
+    // extract host header first
+    let original_host = req
+        .headers()
+        .get(HOST)
+        .cloned()
+        .unwrap_or_else(|| HeaderValue::from_static("localhost"));
+
+    let backend_uri: Uri = target.parse().unwrap();
+
+    if let Some(authority) = backend_uri.authority() {
+        req.headers_mut().insert(
+            HOST,
+            HeaderValue::from_str(authority.as_str()).unwrap(),
+        );
+    }
+
+    let client_ip = remote.ip().to_string();
+
+    req.headers_mut().insert(
+        HeaderName::from_static("x-forwarded-for"),
+        HeaderValue::from_str(&client_ip).unwrap(),
+    );
+
+    req.headers_mut().insert(
+        HeaderName::from_static("x-forwarded-proto"),
+        HeaderValue::from_static("http"),
+    );
+
+    req.headers_mut().insert(
+        HeaderName::from_static("x-forwarded-host"),
+        original_host,
+    );
+
+
+
 
     let resp = match client.request(req).await {
         Ok(r) => r,
@@ -52,9 +104,37 @@ pub async fn forward_request(
         }
     };
 
+
+    let mut resp = resp;
+
+    if let Some(loc) = resp.headers().get(hyper::header::LOCATION).cloned() {
+        if let Ok(loc_str) = loc.to_str() {
+
+            if loc_str.starts_with("http://localhost:8888") {
+                let new_loc = loc_str.replace("http://localhost:8888", prefix);
+
+                resp.headers_mut().insert(
+                    hyper::header::LOCATION,
+                    HeaderValue::from_str(&new_loc).unwrap(),
+                );
+            }
+
+            if loc_str.starts_with("/tree") {
+                let new_loc = format!("{}{}", prefix, loc_str.trim_start_matches('/'));
+
+                resp.headers_mut().insert(
+                    hyper::header::LOCATION,
+                    HeaderValue::from_str(&new_loc).unwrap(),
+                );
+            }
+
+
+            info!("Backend redirect: {}", loc_str);
+        }
+    }
+
     // Convert body to BoxBody
     Ok(resp.map(|b| b.boxed()))
-    // Ok(resp.map(|b| b.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)).boxed()))
 }
 
 

@@ -287,7 +287,6 @@ async fn handle_request(
 
     let raw_path = req.uri().path();
 
-
     let path = decode(raw_path)
         .expect("UTF-8 decoding failed")
         .to_string();
@@ -323,7 +322,7 @@ async fn handle_request(
             return Ok(resp);
         }
 
-        let resp = proxy::reverse::forward_request(req, &prefix, &template).await?;
+        let resp = proxy::reverse::forward_request(req, &prefix, &template, remote).await?;
         HandlerResponse::Proxy(resp)
     } else {
         let resp = static_handler::serve(&root, &path, &rules).await;
@@ -359,9 +358,6 @@ async fn handle_request(
                 return Ok(resp);
             }
 
-
-
-
             if let Some(enc) = accept_encoding {
                 if enc.contains("gzip") {
                     gzip::compress(resp).await
@@ -372,9 +368,13 @@ async fn handle_request(
                 resp
             }
         }
-        HandlerResponse::Proxy(resp) => resp,
+        HandlerResponse::Proxy(resp) => {
+            info!("Proxy response with status {}", resp.status());
+            resp
+        },
     };
 
+    info!(path = %path, status = %response.status(), "Request handled");
     Ok(response)
 }
 
