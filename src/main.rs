@@ -291,6 +291,18 @@ async fn handle_request(
         .expect("UTF-8 decoding failed")
         .to_string();
 
+
+    // Bad design, implement proper routing instead of hardcoding this hack
+    // by implementing RewriteRule in htaccess resolver
+    if path.ends_with("/jupyter/") {
+        return Ok(Response::builder()
+                  .status(StatusCode::FOUND)
+                  .header("Location", format!("{}tree", path))
+                  .body(RespBody::default())
+                  .unwrap());
+    }
+
+
     // Resolve .htaccess rules
     let rules = htaccess::resolver::resolve(&root, &path, &cache).await;
 
@@ -313,6 +325,9 @@ async fn handle_request(
         .get("accept-encoding")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
+
+
+
 
     let handler = if let Some((prefix, template)) = proxy::match_proxy(&rules, &path) {
 
