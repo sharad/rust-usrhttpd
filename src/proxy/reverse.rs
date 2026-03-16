@@ -13,6 +13,18 @@ use tracing::{info, warn, error, debug};
 use crate::types::RespBody;
 use crate::proxy::http_client::HTTP_CLIENT;
 
+
+
+// $ cat .htaccess
+// ProxyPass /Documents/Collection/Compositions/Drafts/misc/jupyter/ http://localhost:8888/Documents/Collection/Compositions/Drafts/misc/jupyter/%s?token=mytoken
+
+// $ jupyter server \                                                                                                                                                                                              1994s
+//     --port 8888 \
+//     --ServerApp.base_url=/Documents/Collection/Compositions/Drafts/misc/jupyter/ \
+//     --ServerApp.token=mytoken
+
+
+
 pub async fn forward_request(
     mut req: Request<Incoming>,
     prefix: &str,
