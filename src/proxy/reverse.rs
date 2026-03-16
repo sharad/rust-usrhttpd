@@ -2,8 +2,8 @@
 
 use hyper::{Request, Response};
 use hyper::body::Incoming;
-use hyper_util::client::legacy::{Client, connect::HttpConnector};
-use hyper_util::rt::TokioExecutor;
+// use hyper_util::client::legacy::{Client, connect::HttpConnector};
+// use hyper_util::rt::TokioExecutor;
 use hyper::header::HOST;
 use hyper::http::Uri;
 use hyper::header::{HeaderName, HeaderValue};
@@ -11,6 +11,7 @@ use http_body_util::BodyExt;
 use tracing::{info, warn, error, debug};
 
 use crate::types::RespBody;
+use crate::proxy::http_client::HTTP_CLIENT;
 
 pub async fn forward_request(
     mut req: Request<Incoming>,
@@ -37,24 +38,12 @@ pub async fn forward_request(
 
     info!(prefix = %prefix, target = %target, "proxying request");
 
-    // *req.uri_mut() = target.parse().unwrap();
-
-
     let backend_uri: Uri = target.parse().unwrap();
     let mut parts = req.uri().clone().into_parts();
     parts.scheme = backend_uri.scheme().cloned();
     parts.authority = backend_uri.authority().cloned();
     parts.path_and_query = backend_uri.path_and_query().cloned();
     *req.uri_mut() = Uri::from_parts(parts).unwrap();
-
-
-    let connector = HttpConnector::new();
-    let client: Client<_, Incoming> =
-        Client::builder(TokioExecutor::new()).build(connector);
-
-
-
-
 
     // extract host header first
     let original_host = req
@@ -92,7 +81,7 @@ pub async fn forward_request(
 
 
 
-    let resp = match client.request(req).await {
+    let resp: Response<Incoming>  = match HTTP_CLIENT.request(req).await {
         Ok(r) => r,
         Err(e) => {
             info!("Proxy error: {}", e);
@@ -134,7 +123,7 @@ pub async fn forward_request(
     }
 
     // Convert body to BoxBody
-    Ok(resp.map(|b| b.boxed()))
+    Ok(resp.map(|b: Incoming| b.boxed()))
 }
 
 

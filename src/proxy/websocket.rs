@@ -1,14 +1,20 @@
+
+
 use hyper::{Request, Response, StatusCode};
 use hyper::body::Incoming;
 use hyper::upgrade;
-use hyper_util::client::legacy::{Client, connect::HttpConnector};
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper::http::Uri;
+use hyper_util::rt::TokioIo;
+// use hyper_util::client::legacy::{Client, connect::HttpConnector};
+// use hyper_util::rt::{TokioExecutor, TokioIo};
 use http_body_util::BodyExt;
 use tokio::io::copy_bidirectional;
 
 use tracing::{info, warn, error, debug};
 
 use crate::types::RespBody;
+use crate::proxy::http_client::HTTP_CLIENT;
+
 
 pub fn is_websocket_request(req: &Request<Incoming>) -> bool {
     req.headers()
@@ -20,21 +26,42 @@ pub fn is_websocket_request(req: &Request<Incoming>) -> bool {
 
 pub async fn handle(
     mut req: Request<Incoming>,
-    target: String,
+    prefix: &str,
+    template: &str,
 ) -> Result<Response<RespBody>, hyper::Error> {
 
     // Capture client upgrade
     let on_client_upgrade = upgrade::on(&mut req);
 
-    // Rewrite URI to backend target
-    *req.uri_mut() = target.parse().unwrap();
 
-    let connector = HttpConnector::new();
-    let client: Client<_, Incoming> =
-        Client::builder(TokioExecutor::new()).build(connector);
+
+
+
+
+    let uri = req.uri().clone();
+    let path = uri.path();
+
+    let remainder = path.strip_prefix(prefix).unwrap_or("");
+
+    let mut target = template.replace("%s", remainder);
+
+    if !target.contains('?') {
+        if let Some(q) = uri.query() {
+            target.push('?');
+            target.push_str(q);
+        }
+    }
+    let backend_uri: Uri = target.parse().unwrap();
+
+    let mut parts = req.uri().clone().into_parts();
+    parts.scheme = backend_uri.scheme().cloned();
+    parts.authority = backend_uri.authority().cloned();
+    parts.path_and_query = backend_uri.path_and_query().cloned();
+
+    *req.uri_mut() = Uri::from_parts(parts).unwrap();
 
     // Send request to backend
-    let mut backend_resp = match client.request(req).await {
+    let mut backend_resp: Response<Incoming>  = match HTTP_CLIENT.request(req).await {
         Ok(r) => r,
         Err(e) => {
             info!("WebSocket backend error: {}", e);
@@ -49,14 +76,6 @@ pub async fn handle(
     // Must be 101
     if backend_resp.status() != StatusCode::SWITCHING_PROTOCOLS {
         return Ok(backend_resp.map(|b| b.boxed()));
-
-        // return Ok(
-        //     backend_resp.map(|b| {
-        //         b.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-        //             .boxed()
-        //     })
-        // );
-
     }
 
     // Capture backend upgrade
@@ -75,14 +94,7 @@ pub async fn handle(
     });
 
     // Return backend 101 to client
-    Ok(backend_resp.map(|b| b.boxed()))
-
-    // Ok(
-    //     backend_resp.map(|b| {
-    //         b.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-    //             .boxed()
-    //     })
-    // )
+    Ok(backend_resp.map(|b: Incoming| b.boxed()))
 }
 
 

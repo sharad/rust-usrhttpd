@@ -1,5 +1,6 @@
 pub mod reverse;
 pub mod websocket;
+pub mod http_client;
 
 use crate::htaccess::rules::HtAccess;
 
@@ -20,3 +21,8 @@ pub fn match_proxy(r: &HtAccess, path: &str) -> Option<(String,String)> {
         .max_by_key(|(prefix, _)| prefix.len())
         .map(|(p,t)| (p.clone(), t.clone()))
 }
+
+
+
+
+

@@ -318,7 +318,7 @@ async fn handle_request(
 
         // --- WebSocket detection ---
         if is_websocket_request(&req) {
-            let resp = proxy::websocket::handle(req, template).await?;
+            let resp = proxy::websocket::handle(req, &prefix, &template).await?;
             return Ok(resp);
         }
 

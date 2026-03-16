@@ -1088,6 +1088,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "mime_guess",
+ "once_cell",
  "parking_lot",
  "pulldown-cmark",
  "regex",
