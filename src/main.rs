@@ -292,19 +292,27 @@ async fn handle_request(
         .to_string();
 
 
-    // Bad design, implement proper routing instead of hardcoding this hack
-    // by implementing RewriteRule in htaccess resolver
-    if path.ends_with("/jupyter/") {
-        return Ok(Response::builder()
-                  .status(StatusCode::FOUND)
-                  .header("Location", format!("{}tree", path))
-                  .body(RespBody::default())
-                  .unwrap());
-    }
+    // // Bad design, implement proper routing instead of hardcoding this hack
+    // // by implementing RewriteRule in htaccess resolver
+    // if path.ends_with("/jupyter/") {
+    //     return Ok(Response::builder()
+    //               .status(StatusCode::FOUND)
+    //               .header("Location", format!("{}tree", path))
+    //               .body(RespBody::default())
+    //               .unwrap());
+    // }
 
+    let mut rewritten_path = path.clone();
 
     // Resolve .htaccess rules
-    let rules = htaccess::resolver::resolve(&root, &path, &cache).await;
+    let rules = htaccess::resolver::resolve(&root, &rewritten_path, &cache).await;
+
+    for (pattern, target) in &rules.rewrite_rules {
+        if pattern == "^$" && rewritten_path == "/" {
+            rewritten_path = format!("/{}", target);
+            break;
+        }
+    }
 
     // IP check
     if !htaccess::ip::check(&rules, Some(remote.ip())) {
@@ -329,7 +337,7 @@ async fn handle_request(
 
 
 
-    let handler = if let Some((prefix, template)) = proxy::match_proxy(&rules, &path) {
+    let handler = if let Some((prefix, template)) = proxy::match_proxy(&rules, &rewritten_path) {
 
         // --- WebSocket detection ---
         if is_websocket_request(&req) {
@@ -340,7 +348,7 @@ async fn handle_request(
         let resp = proxy::reverse::forward_request(req, &prefix, &template, remote).await?;
         HandlerResponse::Proxy(resp)
     } else {
-        let resp = static_handler::serve(&root, &path, &rules).await;
+        let resp = static_handler::serve(&root, &rewritten_path, &rules).await;
         HandlerResponse::Static(resp)
     };
 
@@ -389,7 +397,7 @@ async fn handle_request(
         },
     };
 
-    info!(path = %path, status = %response.status(), "Request handled");
+    info!(path = %rewritten_path, status = %response.status(), "Request handled");
     Ok(response)
 }
 

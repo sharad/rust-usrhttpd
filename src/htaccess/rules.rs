@@ -15,6 +15,8 @@ pub struct HtAccess {
     pub options_indexes: Option<bool>, // Some(true)=enabled, Some(false)=disabled
     pub follow_symlinks: Option<usize>,
     pub allowed_dirs: Vec<PathBuf>,
+
+    pub rewrite_rules: Vec<(String, String)>,
 }
 
 

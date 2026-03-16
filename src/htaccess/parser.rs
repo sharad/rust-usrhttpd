@@ -97,6 +97,12 @@ pub fn parse(contents: &str, base: &Path) -> HtAccess {
                     h.allowed_dirs.push(full);
                 }
             }
+            Some("rewriterule") => {
+                // RewriteRule ^$ tree
+                if let (Some(pattern), Some(target)) = (parts.get(1), parts.get(2)) {
+                    h.rewrite_rules.push((pattern.to_string(), target.to_string()));
+                }
+            }
 
             _ => {}
         }
