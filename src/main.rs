@@ -125,129 +125,6 @@ async fn main() -> Result<()> {
 }
 
 
-
-
-// async fn serve_connection_with_options<I, S>(
-//     io: I,
-//     service: S,
-//     enable_ws: bool,
-// )
-// where
-//     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
-//     S: hyper::service::Service<Request<Incoming>, Response = Response<RespBody>, Error = hyper::Error>
-//     + Send
-//     + 'static,
-//     S::Future: Send,
-// {
-//     let builder = Builder::new(TokioExecutor::new()).http1();
-
-//     let conn = builder.serve_connection(io, service);
-
-//     let conn = if enable_ws {
-//         conn.with_upgrades()
-//     } else {
-//         conn
-//     };
-
-//     if let Err(e) = conn.await {
-//         info!("Connection error: {}", e);
-//     }
-// }
-
-
-
-// async fn serve_connection_with_options<I, S>(
-//     io: I,
-//     service: S,
-//     enable_ws: bool,
-// )
-// where
-//     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
-//     S: hyper::service::Service<
-//         Request<Incoming>,
-//     Response = Response<RespBody>,
-//     Error = hyper::Error,
-//     > + Send + 'static,
-//     S::Future: Send,
-// {
-//     let mut builder = Builder::new(TokioExecutor::new()).http1();
-
-//     if enable_ws {
-//         builder = builder.with_upgrades();
-//     }
-
-//     if let Err(e) = builder.serve_connection(io, service).await {
-//         info!("Connection error: {}", e);
-//     }
-// }
-
-
-// async fn serve_connection_with_options<I, S>(
-//     io: I,
-//     service: S,
-//     enable_ws: bool,
-// )
-// where
-//     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
-//     S: hyper::service::Service<
-//         hyper::Request<hyper::body::Incoming>,
-//     Response = hyper::Response<crate::types::RespBody>,
-//     Error = hyper::Error,
-//     > + Send + 'static,
-//     S::Future: Send,
-// {
-//     let builder = Builder::new(TokioExecutor::new()).http1();
-
-//     let conn = builder.serve_connection(io, service);
-
-//     let conn = if enable_ws {
-//         conn.with_upgrades()
-//     } else {
-//         conn
-//     };
-
-//     if let Err(e) = conn.await {
-//         info!("Connection error: {}", e);
-//     }
-// }
-
-
-// async fn serve_connection_with_options<I, S>(
-//     io: I,
-//     service: S,
-//     enable_ws: bool,
-// )
-// where
-//     I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
-//     S: hyper::service::Service<
-//         hyper::Request<hyper::body::Incoming>,
-//     Response = hyper::Response<crate::types::RespBody>,
-//     Error = hyper::Error,
-//     > + Send + 'static,
-//     S::Future: Send,
-// {
-//     let mut builder = http1::Builder::new();
-
-//     if enable_ws {
-//         builder = builder.keep_alive(true);
-//     }
-
-//     let conn = builder.serve_connection(io, service);
-
-//     let conn = if enable_ws {
-//         conn.with_upgrades()
-//     } else {
-//         conn
-//     };
-
-//     if let Err(e) = conn.await {
-//         info!("Connection error: {}", e);
-//     }
-// }
-
-
-// use hyper::server::conn::http1;
-
 async fn serve_connection_with_options<I, S>(
     io: I,
     service: S,
@@ -302,10 +179,8 @@ async fn handle_request(
     //               .unwrap());
     // }
 
-    let mut rewritten_path = path.clone();
-
     // Resolve .htaccess rules
-    let rules = htaccess::resolver::resolve(&root, &rewritten_path, &cache).await;
+    let rules = htaccess::resolver::resolve(&root, &path, &cache).await;
 
     // for (pattern, target) in &rules.rewrite_rules {
     //     if pattern == "^$" && rewritten_path == "/" {
