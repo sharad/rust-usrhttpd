@@ -17,10 +17,11 @@ use crate::proxy::http_client::HTTP_CLIENT;
 
 // $ cat .htaccess
 // ProxyPass /Documents/Collection/Compositions/Drafts/misc/jupyter/ http://localhost:8888/Documents/Collection/Compositions/Drafts/misc/jupyter/%s?token=mytoken
+// ProxyPass /Documents/Compositions/Drafts/misc/jupyter/ http://localhost:8888/Documents/Compositions/Drafts/misc/jupyter/%s?token=mytoken
 
 // $ jupyter server \                                                                                                                                                                                              1994s
 //     --port 8888 \
-//     --ServerApp.base_url=/Documents/Collection/Compositions/Drafts/misc/jupyter/ \
+//     --ServerApp.base_url=/Documents/Compositions/Drafts/misc/jupyter/ \
 //     --ServerApp.token=mytoken
 
 
