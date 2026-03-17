@@ -38,55 +38,90 @@ use tracing::{info, warn, error, debug};
 use crate::types::RespBody;
 use crate::proxy::websocket::is_websocket_request;
 
+// // mod config;
+// use config::{file, merge, final::FinalConfig};
+// use clap::Parser;
+
 mod config;
+
+use config::args::Args;
+use config::runtime::FinalConfig;
 
 enum HandlerResponse {
     Static(Response<RespBody>),
     Proxy(Response<RespBody>),
 }
 
-#[derive(Parser)]
-#[command(name = "usrhttpd")]
-#[command(about = "Small Rust .htaccess web server")]
-struct Args {
-    // #[arg(short = 'r', long, default_value = "./public")]
-    #[arg(default_value = "./public")]
-    root: String,
+// #[derive(Parser)]
+// #[command(name = "usrhttpd")]
+// #[command(about = "Small Rust .htaccess web server")]
+// struct Args {
+//     // #[arg(short = 'r', long, default_value = "./public")]
+//     #[arg(default_value = "./public")]
+//     root: String,
 
-    #[arg(short = 'H', long, default_value = "127.0.0.1")]
-    host: String,
+//     #[arg(short = 'H', long, default_value = "127.0.0.1")]
+//     host: String,
 
-    #[arg(short = 'p', long, default_value_t = 8080)]
-    port: u16,
+//     #[arg(short = 'p', long, default_value_t = 8080)]
+//     port: u16,
 
-    #[arg(long)]
-    tls_cert: Option<String>,
+//     #[arg(long)]
+//     tls_cert: Option<String>,
 
-    #[arg(long)]
-    tls_key: Option<String>,
+//     #[arg(long)]
+//     tls_key: Option<String>,
 
-    #[arg(long)]
-    config: Option<String>,
+//     #[arg(long)]
+//     config: Option<String>,
 
-    // #[arg(long)]
-    // websocket: bool,
-}
+//     // #[arg(long)]
+//     // websocket: bool,
+// }
+
+
+// #[derive(Parser, Debug)]
+// #[command(name = "usrhttpd")]
+// #[command(about = "Small Rust .htaccess web server")]
+// struct Args {
+//     #[arg(short = 'r', long)]   // , default_value = "./public"
+//     root: Option<String>,
+
+//     #[arg(short = 'H', long)]   // default_value = "127.0.0.1"
+//     host: Option<String>,
+
+//     #[arg(short = 'p', long)]   // default_value_t = 8080
+//     port: Option<u16>,
+
+//     #[arg(long)]
+//     tls_cert: Option<String>,
+
+//     #[arg(long)]
+//     tls_key: Option<String>,
+
+//     #[arg(long)]
+//     config: Option<String>,
+// }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // env_logger::init();
     tracing_subscriber::fmt::init();
     let args = Args::parse();
-    let file_cfg = config::load();
-    let args = config::merge(args, file_cfg);
 
-    let root = std::fs::canonicalize(&args.root)?;
-    let addr: SocketAddr = format!("{}:{}", args.host, args.port).parse()?;
+    let file_cfg = config::load();
+    let merged = config::merge(args, file_cfg);
+    let config = FinalConfig::from(merged);
+
+    // let file_cfg = config::load();
+    // let args = config::merge(args, file_cfg);
+    let root = std::fs::canonicalize(&config.root)?;
+    let addr: SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
 
     let listener = TcpListener::bind(addr).await?;
     println!("Listening on {}", addr);
 
-    let tls_acceptor = if let (Some(cert), Some(key)) = (args.tls_cert, args.tls_key) {
+    let tls_acceptor = if let (Some(cert), Some(key)) = (config.tls_cert, config.tls_key) {
         Some(load_tls(cert, key)?)
     } else {
         None
@@ -108,7 +143,7 @@ async fn main() -> Result<()> {
         let cache = cache.clone();
         let log = log.clone();
         let tls_acceptor = tls_acceptor.clone();
-        // let websocket_enabled = args.websocket;
+        // let websocket_enabled = config.websocket;
 
         tokio::spawn(async move {
             let service = service_fn(move |req: Request<Incoming>| {

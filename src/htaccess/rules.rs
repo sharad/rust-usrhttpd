@@ -18,6 +18,7 @@ pub struct HtAccess {
     pub allowed_dirs: Vec<PathBuf>,
 
     pub rewrite_rules: Vec<(Regex, String)>,
+    // pub render_mode: RenderMode,
 }
 
 

@@ -106,6 +106,17 @@ pub fn parse(contents: &str, base: &Path) -> HtAccess {
                     }
                 }
             }
+            // Some("render") => {
+            //     if let Some(mode) = parts.get(1) {
+            //         h.render_mode = match mode.to_ascii_lowercase().as_str() {
+            //             "auto" => RenderMode::Auto,
+            //             "raw" => RenderMode::Raw,
+            //             "rendered" | "generated" => RenderMode::Rendered,
+            //             _ => h.render_mode,
+            //         };
+            //     }
+            // }
+
 
             _ => {}
         }
