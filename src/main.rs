@@ -38,6 +38,8 @@ use tracing::{info, warn, error, debug};
 use crate::types::RespBody;
 use crate::proxy::websocket::is_websocket_request;
 
+mod config;
+
 enum HandlerResponse {
     Static(Response<RespBody>),
     Proxy(Response<RespBody>),
@@ -63,6 +65,9 @@ struct Args {
     #[arg(long)]
     tls_key: Option<String>,
 
+    #[arg(long)]
+    config: Option<String>,
+
     // #[arg(long)]
     // websocket: bool,
 }
@@ -72,6 +77,8 @@ async fn main() -> Result<()> {
     // env_logger::init();
     tracing_subscriber::fmt::init();
     let args = Args::parse();
+    let file_cfg = config::load();
+    let args = config::merge(args, file_cfg);
 
     let root = std::fs::canonicalize(&args.root)?;
     let addr: SocketAddr = format!("{}:{}", args.host, args.port).parse()?;

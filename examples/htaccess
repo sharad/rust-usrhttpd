@@ -1,0 +1,5 @@
+Options +Indexes
+
+RewriteRule ^$ tree
+
+ProxyPass /api http://localhost:9000/%s
