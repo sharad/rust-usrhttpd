@@ -44,8 +44,8 @@ use crate::proxy::websocket::is_websocket_request;
 
 mod config;
 
-use config::args::Args;
-use config::runtime::FinalConfig;
+// use config::args::Args;
+// use config::runtime::FinalConfig;
 
 enum HandlerResponse {
     Static(Response<RespBody>),
@@ -107,15 +107,16 @@ enum HandlerResponse {
 async fn main() -> Result<()> {
     // env_logger::init();
     tracing_subscriber::fmt::init();
-    let args = Args::parse();
-
+    // let args = Args::parse();
+    let args = config::parse();
     let file_cfg = config::load();
     let merged = config::merge(args, file_cfg);
-    let config = FinalConfig::from(merged);
+    let config = config::finalize(merged);
 
-    // let file_cfg = config::load();
-    // let args = config::merge(args, file_cfg);
+    info!("Starting server with root: {}, host: {}, port: {}, TLS: {}", config.root, config.host, config.port, if config.tls_cert.is_some() && config.tls_key.is_some() { "enabled" } else { "disabled" });
+
     let root = std::fs::canonicalize(&config.root)?;
+
     let addr: SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
 
     let listener = TcpListener::bind(addr).await?;

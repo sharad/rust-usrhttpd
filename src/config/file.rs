@@ -3,7 +3,7 @@
 use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
-use crate::Args;
+use super::args::Args;
 
 
 
@@ -39,25 +39,6 @@ pub fn load_config() -> Option<FileConfig> {
 
     None
 }
-
-
-
-// pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
-//     if let Some(cfg) = file {
-//         Args {
-//             root: cfg.root.unwrap_or(args.root),
-//             host: cfg.host.unwrap_or(args.host),
-//             port: cfg.port.unwrap_or(args.port),
-
-//             tls_cert: cfg.tls.as_ref().and_then(|t| t.cert.clone()).or(args.tls_cert),
-//             tls_key: cfg.tls.as_ref().and_then(|t| t.key.clone()).or(args.tls_key),
-
-//             config: args.config,   // 👈 ADD THIS
-//         }
-//     } else {
-//         args
-//     }
-// }
 
 
 pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
