@@ -24,3 +24,11 @@ pub fn merge(args: Args, file: Option<FileConfig>) -> Args {
 pub fn finalize(args: Args) -> runtime::FinalConfig {
     runtime::FinalConfig::from(args)
 }
+
+pub fn load_all() -> runtime::FinalConfig {
+    let args = parse();
+    let file_cfg = load();
+    let merged = merge(args, file_cfg);
+    finalize(merged)
+}
+

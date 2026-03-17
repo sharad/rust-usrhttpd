@@ -10,7 +10,6 @@ mod proxy;
 mod types;
 
 use anyhow::Result;
-use clap::Parser;
 use hyper::{Request, Response, body::Incoming};
 use hyper_util::{
     rt::TokioIo,
@@ -107,11 +106,7 @@ enum HandlerResponse {
 async fn main() -> Result<()> {
     // env_logger::init();
     tracing_subscriber::fmt::init();
-    // let args = Args::parse();
-    let args = config::parse();
-    let file_cfg = config::load();
-    let merged = config::merge(args, file_cfg);
-    let config = config::finalize(merged);
+    let config = config::load_all();
 
     info!("Starting server with root: {}, host: {}, port: {}, TLS: {}", config.root, config.host, config.port, if config.tls_cert.is_some() && config.tls_key.is_some() { "enabled" } else { "disabled" });
 
