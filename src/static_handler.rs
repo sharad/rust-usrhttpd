@@ -1,5 +1,6 @@
 
-use hyper::{Response, StatusCode};
+use hyper::{Request, Response, StatusCode};
+use hyper::body::Incoming;
 use bytes::Bytes;
 use mime_guess;
 use std::{path::PathBuf, fs};
@@ -22,8 +23,42 @@ use tracing::{info, warn, error, debug};
 use crate::types::RespBody;
 use crate::htaccess::rules::HtAccess;
 
-pub async fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<RespBody> {
+
+#[derive(Debug, Clone, Copy)]
+enum RenderMode {
+    Auto,   // default behavior
+    Raw,    // serve raw file
+    Render, // force render (markdown, etc.)
+    List,   // force directory listing
+    Download,
+    Json,
+}
+
+fn parse_render_mode(req: &Request<Incoming>) -> RenderMode {
+    let query = req.uri().query().unwrap_or("");
+
+    let params: std::collections::HashMap<_, _> =
+        url::form_urlencoded::parse(query.as_bytes())
+        .into_owned()
+        .collect();
+
+    match params.get("mode").map(|s| s.as_str()) {
+        Some("raw") => RenderMode::Raw,
+        Some("render") => RenderMode::Render,
+        Some("list") => RenderMode::List,
+        Some("download") => RenderMode::Download,
+        Some("json") => RenderMode::Json,
+        _ => RenderMode::Auto,
+    }
+}
+
+pub async fn serve(req: &Request<Incoming>,
+                   root: &PathBuf,
+                   path: &str,
+                   rules: &HtAccess,) -> Response<RespBody> {
     let requested = root.join(path.trim_start_matches('/'));
+
+    let mode = parse_render_mode(req);
 
     // let levels = rules.follow_symlinks.unwrap_or(10);
     // let boundary = root
@@ -95,12 +130,69 @@ pub async fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<Re
     };
 
     // 🔹 If directory → try index files
+    // if p.is_dir() {
+    //     if let Some(index) = find_index(&p) {
+    //         return serve_file(index).await;
+    //     }
+
+    //     // Directory listing control via htaccess
+    //     let allow_listing = rules.options_indexes.unwrap_or(true);
+
+    //     if !allow_listing {
+    //         return resp(StatusCode::FORBIDDEN, "Directory listing denied");
+    //     }
+
+    //     return directory_listing(&p);
+    // }
+
+    // if p.is_dir() {
+
+    //     match mode {
+    //         RenderMode::Raw => {
+    //             return resp(StatusCode::FORBIDDEN, "Cannot raw-read directory");
+    //         }
+
+    //         RenderMode::List => {
+    //             return directory_listing(&p);
+    //         }
+
+    //         _ => {}
+    //     }
+
+    //     if let Some(index) = find_index(&p) {
+    //         return serve_file(index, mode).await;
+    //     }
+
+    //     let allow_listing = rules.options_indexes.unwrap_or(true);
+
+    //     if !allow_listing {
+    //         return resp(StatusCode::FORBIDDEN, "Directory listing denied");
+    //     }
+
+    //     return directory_listing(&p);
+    // }
+
     if p.is_dir() {
-        if let Some(index) = find_index(&p) {
-            return serve_file(index).await;
+        match mode {
+            RenderMode::Raw | RenderMode::Download => {
+                return resp(StatusCode::FORBIDDEN, "Cannot download directory");
+            }
+
+            RenderMode::List => {
+                return directory_listing(&p);
+            }
+
+            RenderMode::Json => {
+                return directory_listing_json(&p);
+            }
+
+            _ => {}
         }
 
-        // Directory listing control via htaccess
+        if let Some(index) = find_index(&p) {
+            return serve_file(index, mode).await;
+        }
+
         let allow_listing = rules.options_indexes.unwrap_or(true);
 
         if !allow_listing {
@@ -110,8 +202,9 @@ pub async fn serve(root: &PathBuf, path: &str, rules: &HtAccess,) -> Response<Re
         return directory_listing(&p);
     }
 
+
     // 🔹 Normal file
-    serve_file(p).await
+    serve_file(p, mode).await
 }
 
 fn find_index(dir: &PathBuf) -> Option<PathBuf> {
@@ -125,19 +218,168 @@ fn find_index(dir: &PathBuf) -> Option<PathBuf> {
     None
 }
 
-async fn serve_file(path: PathBuf) -> Response<RespBody> {
+// async fn serve_file(path: PathBuf, mode: RenderMode) -> Response<RespBody> {
 
-    if let Some(resp) = render_if_needed(&path) {
-        return resp;
+//     if let Some(resp) = render_if_needed(&path) {
+//         return resp;
+//     }
+
+//     match File::open(&path).await {
+//         Ok(file) => {
+
+//             let size = match file.metadata().await {
+//                 Ok(m) => m.len(),
+//                 Err(_) => 0
+//             };
+
+//             let mime = mime_guess::from_path(&path).first_or_octet_stream();
+
+//             let stream = ReaderStream::new(file)
+//                 .map(|result| Ok(Frame::data(result.unwrap())));
+
+//             let body = BodyExt::boxed(StreamBody::new(stream));
+
+
+//             let mut resp = Response::new(body);
+
+//             // set content type
+//             resp.headers_mut().insert(
+//                 hyper::header::CONTENT_TYPE,
+//                 mime.to_string().parse().unwrap()
+//             );
+
+//             // // ADD CONTENT LENGTH HERE
+//             if size > 0 {
+//                 resp.headers_mut().insert(
+//                     hyper::header::CONTENT_LENGTH,
+//                     size.to_string().parse().unwrap()
+//                 );
+//             }
+
+//             resp.headers_mut().insert(
+//                 hyper::header::ACCEPT_RANGES,
+//                 "bytes".parse().unwrap()
+//             );
+
+//             resp
+//         }
+
+//         Err(e) => {
+//             info!("Reading failed: {}", e);
+//             resp(StatusCode::NOT_FOUND, "Not Found")
+//         }
+
+//     }
+// }
+
+
+// async fn serve_file(path: PathBuf, mode: RenderMode) -> Response<RespBody> {
+
+//     // 🔥 Mode override FIRST
+//     match mode {
+//         RenderMode::Raw => {
+//             return serve_raw_file(path).await;
+//         }
+
+//         RenderMode::Render => {
+//             if let Some(resp) = render_if_needed(&path) {
+//                 return resp;
+//             }
+//         }
+
+//         RenderMode::Auto => {
+//             if let Some(resp) = render_if_needed(&path) {
+//                 return resp;
+//             }
+//         }
+
+//         _ => {}
+//     }
+
+//     serve_raw_file(path).await
+// }
+
+
+async fn serve_file(path: PathBuf, mode: RenderMode) -> Response<RespBody> {
+
+    match mode {
+        RenderMode::Raw => {
+            return serve_raw_file(path, false).await;
+        }
+
+        RenderMode::Download => {
+            return serve_raw_file(path, true).await;
+        }
+
+        RenderMode::Render => {
+            if let Some(resp) = render_if_needed(&path) {
+                return resp;
+            }
+        }
+
+        RenderMode::Json => {
+            return file_as_json(&path);
+        }
+
+        RenderMode::Auto => {
+            if let Some(resp) = render_if_needed(&path) {
+                return resp;
+            }
+        }
+
+        _ => {}
     }
 
+    serve_raw_file(path, false).await
+}
+
+
+// async fn serve_raw_file(path: PathBuf) -> Response<RespBody> {
+//     match File::open(&path).await {
+//         Ok(file) => {
+//             let size = file.metadata().await.map(|m| m.len()).unwrap_or(0);
+
+//             let mime = mime_guess::from_path(&path).first_or_octet_stream();
+
+//             let stream = ReaderStream::new(file)
+//                 .map(|result| Ok(Frame::data(result.unwrap())));
+
+//             let body = BodyExt::boxed(StreamBody::new(stream));
+
+//             let mut resp = Response::new(body);
+
+//             resp.headers_mut().insert(
+//                 hyper::header::CONTENT_TYPE,
+//                 mime.to_string().parse().unwrap(),
+//             );
+
+//             if size > 0 {
+//                 resp.headers_mut().insert(
+//                     hyper::header::CONTENT_LENGTH,
+//                     size.to_string().parse().unwrap(),
+//                 );
+//             }
+
+//             resp.headers_mut().insert(
+//                 hyper::header::ACCEPT_RANGES,
+//                 "bytes".parse().unwrap(),
+//             );
+
+//             resp
+//         }
+
+//         Err(e) => {
+//             info!("Reading failed: {}", e);
+//             resp(StatusCode::NOT_FOUND, "Not Found")
+//         }
+//     }
+// }
+
+
+async fn serve_raw_file(path: PathBuf, download: bool) -> Response<RespBody> {
     match File::open(&path).await {
         Ok(file) => {
-
-            let size = match file.metadata().await {
-                Ok(m) => m.len(),
-                Err(_) => 0
-            };
+            let size = file.metadata().await.map(|m| m.len()).unwrap_or(0);
 
             let mime = mime_guess::from_path(&path).first_or_octet_stream();
 
@@ -146,27 +388,38 @@ async fn serve_file(path: PathBuf) -> Response<RespBody> {
 
             let body = BodyExt::boxed(StreamBody::new(stream));
 
-
             let mut resp = Response::new(body);
 
-            // set content type
             resp.headers_mut().insert(
                 hyper::header::CONTENT_TYPE,
-                mime.to_string().parse().unwrap()
+                mime.to_string().parse().unwrap(),
             );
 
-            // // ADD CONTENT LENGTH HERE
             if size > 0 {
                 resp.headers_mut().insert(
                     hyper::header::CONTENT_LENGTH,
-                    size.to_string().parse().unwrap()
+                    size.to_string().parse().unwrap(),
                 );
             }
 
             resp.headers_mut().insert(
                 hyper::header::ACCEPT_RANGES,
-                "bytes".parse().unwrap()
+                "bytes".parse().unwrap(),
             );
+
+            // 🔥 Download mode
+            if download {
+                let filename = path.file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or("file");
+
+                let value = format!("attachment; filename=\"{}\"", filename);
+
+                resp.headers_mut().insert(
+                    hyper::header::CONTENT_DISPOSITION,
+                    value.parse().unwrap(),
+                );
+            }
 
             resp
         }
@@ -175,8 +428,71 @@ async fn serve_file(path: PathBuf) -> Response<RespBody> {
             info!("Reading failed: {}", e);
             resp(StatusCode::NOT_FOUND, "Not Found")
         }
+    }
+}
+
+
+fn directory_listing_json(path: &PathBuf) -> Response<RespBody> {
+    let mut entries = vec![];
+
+    if let Ok(read_dir) = std::fs::read_dir(path) {
+        // for entry in read_dir.flatten() {
+        //     let meta = entry.metadata().ok();
+
+        //     entries.push(serde_json::json!({
+        //         "name": entry.file_name().to_string_lossy(),
+        //         "is_dir": meta.map(|m| m.is_dir()).unwrap_or(false),
+        //         "size": meta.map(|m| m.len()).unwrap_or(0),
+        //     }));
+        // }
+
+
+        for entry in read_dir.flatten() {
+            let (is_dir, size) = match entry.metadata() {
+                Ok(m) => (m.is_dir(), m.len()),
+                Err(_) => (false, 0),
+            };
+
+            entries.push(serde_json::json!({
+                "name": entry.file_name().to_string_lossy(),
+                "is_dir": is_dir,
+                "size": size,
+            }));
+        }
 
     }
+
+
+
+    let body = serde_json::to_string_pretty(&entries).unwrap();
+
+    Response::builder()
+        .header("content-type", "application/json")
+        .body(
+            Full::new(Bytes::from(body))
+                .map_err(|never| match never {})
+                .boxed()
+        )
+        .unwrap()
+}
+
+
+fn file_as_json(path: &PathBuf) -> Response<RespBody> {
+    let content = std::fs::read_to_string(path).unwrap_or_default();
+
+    let body = serde_json::json!({
+        "path": path.display().to_string(),
+        "content": content
+    });
+
+    Response::builder()
+        .header("content-type", "application/json")
+        .body(
+            Full::new(Bytes::from(body.to_string()))
+                .map_err(|never| match never {})
+                .boxed()
+        )
+        .unwrap()
 }
 
 pub fn generate_directory_html(dir: &PathBuf) -> Result<String, std::io::Error> {

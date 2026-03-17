@@ -92,8 +92,14 @@ async fn main() -> Result<()> {
         None
     };
 
+
+    info!("Server started with root: {}, TLS: {}", root.display(), if tls_acceptor.is_some() { "enabled" } else { "disabled" });
+
     let cache = Arc::new(cache::HtCache::new());
     let log = Arc::new(access_log::AccessLogger::new("access.log")?);
+
+    info!("Entering main loop");
+
 
     loop {
         let (stream, remote) = listener.accept().await?;
@@ -236,7 +242,7 @@ async fn handle_request(
         let resp = proxy::reverse::forward_request(req, &prefix, &template, remote).await?;
         HandlerResponse::Proxy(resp)
     } else {
-        let resp = static_handler::serve(&root, &path, &rules).await;
+        let resp = static_handler::serve(&req, &root, &path, &rules).await;
         HandlerResponse::Static(resp)
     };
 
