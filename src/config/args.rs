@@ -27,6 +27,10 @@ pub struct Args {
     #[arg(long)]
     pub tls_key: Option<String>,
 
+    /// Path to access log file
+    #[arg(long)]
+    pub alog: Option<String>,
+
     /// Path to config file
     #[arg(long)]
     pub config: Option<String>,

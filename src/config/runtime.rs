@@ -8,6 +8,7 @@ pub struct FinalConfig {
     pub port: u16,
     pub tls_cert: Option<String>,
     pub tls_key: Option<String>,
+    pub alog: Option<String>,
 }
 
 impl From<Args> for FinalConfig {
@@ -18,6 +19,7 @@ impl From<Args> for FinalConfig {
             port: args.port.unwrap(),
             tls_cert: args.tls_cert,
             tls_key: args.tls_key,
+            alog: args.alog,
         }
     }
 }

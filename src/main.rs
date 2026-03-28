@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
     info!("Server started with root: {}, TLS: {}", root.display(), if tls_acceptor.is_some() { "enabled" } else { "disabled" });
 
     let cache = Arc::new(cache::HtCache::new());
-    let log = Arc::new(access_log::AccessLogger::new("access.log")?);
+    let log = Arc::new(access_log::AccessLogger::new(config.alog.as_deref())?);
 
     info!("Entering main loop");
 

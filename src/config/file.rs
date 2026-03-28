@@ -12,8 +12,8 @@ pub struct FileConfig {
     pub root: Option<String>,
     pub host: Option<String>,
     pub port: Option<u16>,
-
     pub tls: Option<TlsConfig>,
+    pub alog: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,9 +47,9 @@ pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
             root: args.root.or(cfg.root).or(Some("./public".into())),
             host: args.host.or(cfg.host).or(Some("127.0.0.1".into())),
             port: args.port.or(cfg.port).or(Some(8080)),
-
             tls_cert: args.tls_cert.or(cfg.tls.as_ref().and_then(|t| t.cert.clone())),
             tls_key: args.tls_key.or(cfg.tls.as_ref().and_then(|t| t.key.clone())),
+            alog: args.alog.or(cfg.alog).or(Some("access.log".into())),
 
             config: args.config,
         }
