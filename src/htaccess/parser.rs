@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::{net::IpAddr, path::{Path, PathBuf}};
 
-use super::rules::HtAccess;
+use super::rules::{HtAccess, ProxyCmd};
 
 pub fn parse(contents: &str, base: &Path) -> HtAccess {
     let mut h = HtAccess::default();
@@ -61,6 +61,18 @@ pub fn parse(contents: &str, base: &Path) -> HtAccess {
             Some("proxypass") => {
                 if let (Some(prefix), Some(target)) = (parts.get(1), parts.get(2)) {
                     h.proxy_pass.push((prefix.to_string(), target.to_string()));
+                }
+            }
+            Some("proxycmdpass") => {
+                if parts.len() >= 5 {
+                    h.proxy_cmd_pass.push(
+                        ProxyCmd {
+                            prefix: parts[1].to_string(),
+                            target: parts[2].to_string(),
+                            ttl_secs: parts[3].parse().unwrap_or(600),
+                            command: parts[4..].join(" "),
+                        }
+                    );
                 }
             }
             Some("options") => {

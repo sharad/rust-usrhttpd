@@ -22,11 +22,15 @@ use hyper::server::conn::http1;
 // use bytes::Bytes;
 use tokio::{net::TcpListener};
 use tokio_rustls::TlsAcceptor;
-use std::{sync::Arc, net::SocketAddr, path::PathBuf};
+use std::{
+    io::BufReader,
+    fs::File,
+    sync::Arc,
+    net::SocketAddr,
+    path::PathBuf
+};
 use rustls::{ServerConfig};
 use rustls_pemfile::{certs, pkcs8_private_keys};
-use std::fs::File;
-use std::io::BufReader;
 
 use hyper::service::service_fn;
 use urlencoding::decode;
@@ -72,6 +76,17 @@ async fn main() -> Result<()> {
     let log = Arc::new(access_log::AccessLogger::new(config.alog.as_deref())?);
 
     info!("Entering main loop");
+
+
+    tokio::spawn(async {
+        loop {
+            proxy::cmd::cleanup_expired().await;
+
+            tokio::time::sleep(
+                std::time::Duration::from_secs(30)
+            ).await;
+        }
+    });
 
 
     loop {
@@ -202,6 +217,27 @@ async fn handle_request(
         .map(|s| s.to_string());
 
 
+    if let Some(cmd) =
+        proxy::match_proxy_cmd(&rules, &path)
+    {
+        proxy::cmd::ensure_running(
+            &cmd.prefix,
+            &cmd.target,
+            cmd.ttl_secs,
+            &cmd.command,
+            &root,
+        ).await;
+
+        let resp =
+            proxy::reverse::forward_request(
+                req,
+                &cmd.prefix,
+                &cmd.target,
+                remote,
+            ).await?;
+
+        return Ok(resp);
+    }
 
 
     let handler = if let Some((prefix, template)) = proxy::match_proxy(&rules, &path) {
