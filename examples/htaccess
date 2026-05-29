@@ -3,3 +3,17 @@ Options +Indexes
 RewriteRule ^$ tree
 
 ProxyPass /api http://localhost:9000/%s
+
+
+ProxyCmdPass /jupyter http://localhost:8888 600 \
+  jupyter server --ServerApp.base_url=%D
+
+ProxyCmdPass /lab http://localhost:8889 600 \
+  jupyter lab --ServerApp.base_url=%D
+
+ProxyCmdPass /ollama http://localhost:11434 3600 \
+  ollama serve
+
+
+
+
