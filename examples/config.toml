@@ -1,6 +1,7 @@
 root = "./public"
 host = "127.0.0.1"
 port = 8080
+alog = "~/.local/state/usrhttpd-access.log"
 
 [tls]
 cert = "cert.pem"

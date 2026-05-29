@@ -41,19 +41,62 @@ pub fn load_config() -> Option<FileConfig> {
 }
 
 
+// pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
+//     if let Some(cfg) = file {
+//         Args {
+//             root: args.root.or(cfg.root).or(Some("./public".into())),
+//             host: args.host.or(cfg.host).or(Some("127.0.0.1".into())),
+//             port: args.port.or(cfg.port).or(Some(8080)),
+//             tls_cert: args.tls_cert.or(cfg.tls.as_ref().and_then(|t| t.cert.clone())),
+//             tls_key: args.tls_key.or(cfg.tls.as_ref().and_then(|t| t.key.clone())),
+//             alog: args.alog.or(cfg.alog).or(Some("access.log".into())),
+
+//             config: args.config,
+//         }
+//     } else {
+//         args
+//     }
+// }
+
+
 pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
     if let Some(cfg) = file {
         Args {
-            root: args.root.or(cfg.root).or(Some("./public".into())),
-            host: args.host.or(cfg.host).or(Some("127.0.0.1".into())),
-            port: args.port.or(cfg.port).or(Some(8080)),
-            tls_cert: args.tls_cert.or(cfg.tls.as_ref().and_then(|t| t.cert.clone())),
-            tls_key: args.tls_key.or(cfg.tls.as_ref().and_then(|t| t.key.clone())),
-            alog: args.alog.or(cfg.alog).or(Some("access.log".into())),
+            root: expand_opt(
+                args.root.or(cfg.root).or(Some("./public".into()))
+            ),
 
-            config: args.config,
+            host: args.host.or(cfg.host).or(Some("127.0.0.1".into())),
+
+            port: args.port.or(cfg.port).or(Some(8080)),
+
+            tls_cert: expand_opt(
+                args.tls_cert.or(
+                    cfg.tls.as_ref().and_then(|t| t.cert.clone())
+                )
+            ),
+
+            tls_key: expand_opt(
+                args.tls_key.or(
+                    cfg.tls.as_ref().and_then(|t| t.key.clone())
+                )
+            ),
+
+            alog: expand_opt(
+                args.alog.or(cfg.alog).or(Some("access.log".into()))
+            ),
+
+            config: expand_opt(args.config),
         }
     } else {
         args
     }
+}
+
+fn expand_opt(v: Option<String>) -> Option<String> {
+    v.map(|s| {
+        shellexpand::full(&s)
+            .unwrap_or_else(|_| std::borrow::Cow::Owned(s.clone()))
+            .into_owned()
+    })
 }
