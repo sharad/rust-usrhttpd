@@ -1,3 +1,7 @@
+
+
+AllowedDirs /absolute/path/to/dir1 /absolute/path/to/dir2 
+
 Options +Indexes
 
 RewriteRule ^$ tree
