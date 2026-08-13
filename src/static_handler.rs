@@ -129,49 +129,6 @@ pub async fn serve(req: &Request<Incoming>,
         }
     };
 
-    // 🔹 If directory → try index files
-    // if p.is_dir() {
-    //     if let Some(index) = find_index(&p) {
-    //         return serve_file(index).await;
-    //     }
-
-    //     // Directory listing control via htaccess
-    //     let allow_listing = rules.options_indexes.unwrap_or(true);
-
-    //     if !allow_listing {
-    //         return resp(StatusCode::FORBIDDEN, "Directory listing denied");
-    //     }
-
-    //     return directory_listing(&p);
-    // }
-
-    // if p.is_dir() {
-
-    //     match mode {
-    //         RenderMode::Raw => {
-    //             return resp(StatusCode::FORBIDDEN, "Cannot raw-read directory");
-    //         }
-
-    //         RenderMode::List => {
-    //             return directory_listing(&p);
-    //         }
-
-    //         _ => {}
-    //     }
-
-    //     if let Some(index) = find_index(&p) {
-    //         return serve_file(index, mode).await;
-    //     }
-
-    //     let allow_listing = rules.options_indexes.unwrap_or(true);
-
-    //     if !allow_listing {
-    //         return resp(StatusCode::FORBIDDEN, "Directory listing denied");
-    //     }
-
-    //     return directory_listing(&p);
-    // }
-
     if p.is_dir() {
         match mode {
             RenderMode::Raw | RenderMode::Download => {
@@ -218,87 +175,6 @@ fn find_index(dir: &PathBuf) -> Option<PathBuf> {
     None
 }
 
-// async fn serve_file(path: PathBuf, mode: RenderMode) -> Response<RespBody> {
-
-//     if let Some(resp) = render_if_needed(&path) {
-//         return resp;
-//     }
-
-//     match File::open(&path).await {
-//         Ok(file) => {
-
-//             let size = match file.metadata().await {
-//                 Ok(m) => m.len(),
-//                 Err(_) => 0
-//             };
-
-//             let mime = mime_guess::from_path(&path).first_or_octet_stream();
-
-//             let stream = ReaderStream::new(file)
-//                 .map(|result| Ok(Frame::data(result.unwrap())));
-
-//             let body = BodyExt::boxed(StreamBody::new(stream));
-
-
-//             let mut resp = Response::new(body);
-
-//             // set content type
-//             resp.headers_mut().insert(
-//                 hyper::header::CONTENT_TYPE,
-//                 mime.to_string().parse().unwrap()
-//             );
-
-//             // // ADD CONTENT LENGTH HERE
-//             if size > 0 {
-//                 resp.headers_mut().insert(
-//                     hyper::header::CONTENT_LENGTH,
-//                     size.to_string().parse().unwrap()
-//                 );
-//             }
-
-//             resp.headers_mut().insert(
-//                 hyper::header::ACCEPT_RANGES,
-//                 "bytes".parse().unwrap()
-//             );
-
-//             resp
-//         }
-
-//         Err(e) => {
-//             info!("Reading failed: {}", e);
-//             resp(StatusCode::NOT_FOUND, "Not Found")
-//         }
-
-//     }
-// }
-
-
-// async fn serve_file(path: PathBuf, mode: RenderMode) -> Response<RespBody> {
-
-//     // 🔥 Mode override FIRST
-//     match mode {
-//         RenderMode::Raw => {
-//             return serve_raw_file(path).await;
-//         }
-
-//         RenderMode::Render => {
-//             if let Some(resp) = render_if_needed(&path) {
-//                 return resp;
-//             }
-//         }
-
-//         RenderMode::Auto => {
-//             if let Some(resp) = render_if_needed(&path) {
-//                 return resp;
-//             }
-//         }
-
-//         _ => {}
-//     }
-
-//     serve_raw_file(path).await
-// }
-
 
 async fn serve_file(path: PathBuf, mode: RenderMode) -> Response<RespBody> {
 
@@ -332,48 +208,6 @@ async fn serve_file(path: PathBuf, mode: RenderMode) -> Response<RespBody> {
 
     serve_raw_file(path, false).await
 }
-
-
-// async fn serve_raw_file(path: PathBuf) -> Response<RespBody> {
-//     match File::open(&path).await {
-//         Ok(file) => {
-//             let size = file.metadata().await.map(|m| m.len()).unwrap_or(0);
-
-//             let mime = mime_guess::from_path(&path).first_or_octet_stream();
-
-//             let stream = ReaderStream::new(file)
-//                 .map(|result| Ok(Frame::data(result.unwrap())));
-
-//             let body = BodyExt::boxed(StreamBody::new(stream));
-
-//             let mut resp = Response::new(body);
-
-//             resp.headers_mut().insert(
-//                 hyper::header::CONTENT_TYPE,
-//                 mime.to_string().parse().unwrap(),
-//             );
-
-//             if size > 0 {
-//                 resp.headers_mut().insert(
-//                     hyper::header::CONTENT_LENGTH,
-//                     size.to_string().parse().unwrap(),
-//                 );
-//             }
-
-//             resp.headers_mut().insert(
-//                 hyper::header::ACCEPT_RANGES,
-//                 "bytes".parse().unwrap(),
-//             );
-
-//             resp
-//         }
-
-//         Err(e) => {
-//             info!("Reading failed: {}", e);
-//             resp(StatusCode::NOT_FOUND, "Not Found")
-//         }
-//     }
-// }
 
 
 async fn serve_raw_file(path: PathBuf, download: bool) -> Response<RespBody> {
@@ -436,17 +270,6 @@ fn directory_listing_json(path: &PathBuf) -> Response<RespBody> {
     let mut entries = vec![];
 
     if let Ok(read_dir) = std::fs::read_dir(path) {
-        // for entry in read_dir.flatten() {
-        //     let meta = entry.metadata().ok();
-
-        //     entries.push(serde_json::json!({
-        //         "name": entry.file_name().to_string_lossy(),
-        //         "is_dir": meta.map(|m| m.is_dir()).unwrap_or(false),
-        //         "size": meta.map(|m| m.len()).unwrap_or(0),
-        //     }));
-        // }
-
-
         for entry in read_dir.flatten() {
             let (is_dir, size) = match entry.metadata() {
                 Ok(m) => (m.is_dir(), m.len()),
@@ -495,37 +318,56 @@ fn file_as_json(path: &PathBuf) -> Response<RespBody> {
         .unwrap()
 }
 
+
 pub fn generate_directory_html(dir: &PathBuf) -> Result<String, std::io::Error> {
-    let mut entries = fs::read_dir(dir)?;
+    let entries = fs::read_dir(dir)?;
+
+    let mut entries: Vec<_> = entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name() != "index.html")
+        .collect();
+
+    // Directories first, then files; alphabetically within each group.
+    entries.sort_by(|a, b| {
+        let a_is_dir = a.path().is_dir();
+        let b_is_dir = b.path().is_dir();
+
+        b_is_dir
+            .cmp(&a_is_dir)
+            .then_with(|| {
+                a.file_name()
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .cmp(&b.file_name().to_string_lossy().to_lowercase())
+            })
+    });
 
     let mut html = String::new();
 
-    let dirname = dir.file_name().and_then(OsStr::to_str).unwrap_or("/");
+    let dirname = dir.file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("/");
 
     html.push_str("<html><head><title>Index of ");
     html.push_str(dirname);
     html.push_str("</title></head><body>");
+
     html.push_str("<h1>Index of ");
     html.push_str(dirname);
     html.push_str("</h1><hr><ul>");
 
     html.push_str("<li style=\"white-space: pre\"><a href=\"..\">../</a></li>");
 
-    // ----------------------------
-    // Directory entries
-    // ----------------------------
-    while let Some(Ok(entry)) = entries.next() {
+    for entry in entries {
         let name = entry.file_name();
         let name = name.to_string_lossy();
 
-        if name  == "index.html" {
-            continue;
-        }
         let mut display = name.to_string();
         let mut href = encode(&display).to_string();
+
         if entry.path().is_dir() {
             href.push('/');
-            display.push('/')
+            display.push('/');
         }
 
         html.push_str("<li style=\"white-space: pre\"><a href=\"");
