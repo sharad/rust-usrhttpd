@@ -51,8 +51,20 @@ enum HandlerResponse {
 #[tokio::main]
 async fn main() -> Result<()> {
     // env_logger::init();
-    tracing_subscriber::fmt::init();
     let config = config::load_all();
+
+    // tracing_subscriber::fmt::init();
+    if config.inetd.unwrap_or(false) {
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_ansi(false)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stdout)
+            .with_ansi(false)
+            .init();
+    }
 
     info!(
         "Starting server with root: {}, host: {}, port: {}, TLS: {}, inetd: {}",
