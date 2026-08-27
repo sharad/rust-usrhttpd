@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
             .init();
     } else {
         tracing_subscriber::fmt()
-            .with_writer(std::io::stdout)
+            .with_writer(std::io::stderr)
             .with_ansi(false)
             .init();
     }
