@@ -53,13 +53,18 @@ async fn main() -> Result<()> {
     // env_logger::init();
     let config = config::load_all();
 
+
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsRawFd;
+
+        eprintln!("stdin  fd = {}", std::io::stdin().as_raw_fd());
+        eprintln!("stdout fd = {}", std::io::stdout().as_raw_fd());
+        eprintln!("stderr fd = {}", std::io::stderr().as_raw_fd());
+    }
+
     // tracing_subscriber::fmt::init();
-    if config.inetd.unwrap_or(false) {
-        tracing_subscriber::fmt()
-            .with_writer(std::io::stderr)
-            .with_ansi(false)
-            .init();
-    } else {
+    if !config.inetd.unwrap_or(false) {
         tracing_subscriber::fmt()
             .with_writer(std::io::stderr)
             .with_ansi(false)
