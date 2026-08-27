@@ -9,6 +9,7 @@ pub struct FinalConfig {
     pub tls_cert: Option<String>,
     pub tls_key: Option<String>,
     pub alog: Option<String>,
+    pub inetd: Option<bool>,
 }
 
 impl From<Args> for FinalConfig {

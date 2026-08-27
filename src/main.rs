@@ -20,7 +20,7 @@ use hyper_util::{
 use hyper::server::conn::http1;
 // use http_body_util::combinators::BoxBody;
 // use bytes::Bytes;
-use tokio::{net::TcpListener};
+use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsAcceptor;
 use std::{
     io::BufReader,
@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
         } else {
             "disabled"
         },
-        config.inetd,
+        config.inetd.unwrap_or(false),
     );
 
 
@@ -72,8 +72,8 @@ async fn main() -> Result<()> {
 
     // let addr: SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
 
-    let listener = TcpListener::bind(addr).await?;
-    println!("Listening on {}", addr);
+    // let listener = TcpListener::bind(addr).await?;
+    // println!("Listening on {}", addr);
 
     let tls_acceptor = if let (Some(cert), Some(key)) = (config.tls_cert, config.tls_key) {
         Some(load_tls(cert, key)?)
@@ -225,6 +225,8 @@ async fn run_listener(
     let listener = TcpListener::bind(addr).await?;
 
     info!("Listening on {}", addr);
+
+
 
     loop {
         let (stream, remote) = listener.accept().await?;

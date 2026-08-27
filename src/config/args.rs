@@ -33,7 +33,7 @@ pub struct Args {
 
     /// Read the HTTP connection from stdin/stdout
     #[arg(long)]
-    inetd: Option<bool>,
+    pub inetd: Option<bool>,
 
     /// Path to config file
     #[arg(long)]
