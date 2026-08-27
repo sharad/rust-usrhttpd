@@ -120,8 +120,8 @@ async fn main() -> Result<()> {
     }
 }
 
-fn init_logging(config: &config::FinalConfig) -> Result<()> {
-    if let Some(path) = &config.error_log {
+fn init_logging(config: &config::runtime::FinalConfig) -> Result<()> {
+    if let Some(path) = &config.log {
         let file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)

@@ -22,7 +22,7 @@ impl From<Args> for FinalConfig {
             tls_cert: args.tls_cert,
             tls_key: args.tls_key,
             alog: args.alog,
-            log: args.alog,
+            log: args.log,
             inetd: args.inetd,
         }
     }
