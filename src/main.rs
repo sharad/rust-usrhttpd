@@ -53,24 +53,7 @@ async fn main() -> Result<()> {
     // env_logger::init();
     let config = config::load_all();
 
-
-
-    // tracing_subscriber::fmt::init();
-    if !config.inetd.unwrap_or(false) {
-        tracing_subscriber::fmt()
-            .with_writer(std::io::stderr)
-            .with_ansi(false)
-            .init();
-        #[cfg(unix)]
-        {
-            use std::os::fd::AsRawFd;
-
-            info!("stdin  fd = {}", std::io::stdin().as_raw_fd());
-            info!("stdout fd = {}", std::io::stdout().as_raw_fd());
-            info!("stderr fd = {}", std::io::stderr().as_raw_fd());
-        }
-    }
-
+    init_logging(&config)?;
 
     info!(
         "Starting server with root: {}, host: {}, port: {}, TLS: {}, inetd: {}",
@@ -135,43 +118,39 @@ async fn main() -> Result<()> {
             tls_acceptor,
         ).await
     }
-
-    // loop {
-    //     let (stream, remote) = listener.accept().await?;
-
-    //     let root = root.clone();
-    //     let cache = cache.clone();
-    //     let log = log.clone();
-    //     let tls_acceptor = tls_acceptor.clone();
-    //     // let websocket_enabled = config.websocket;
-
-    //     tokio::spawn(async move {
-    //         let service = service_fn(move |req: Request<Incoming>| {
-    //             let root = root.clone();
-    //             let cache = cache.clone();
-    //             let log = log.clone();
-
-    //             async move {
-    //                 handle_request(req, root, remote, cache, log).await
-    //             }
-    //         });
-
-    //         if let Some(acceptor) = tls_acceptor {
-    //             match acceptor.accept(stream).await {
-    //                 Ok(tls_stream) => {
-    //                     let io = TokioIo::new(tls_stream);
-    //                     serve_connection_with_options(io, service).await;
-    //                 }
-    //                 Err(e) => info!("TLS error: {}", e),
-    //             }
-    //         } else {
-    //             let io = TokioIo::new(stream);
-    //             serve_connection_with_options(io, service).await;
-    //         }
-    //     });
-    // }
 }
 
+fn init_logging(config: &config::FinalConfig) -> Result<()> {
+    if let Some(path) = &config.error_log {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+
+        tracing_subscriber::fmt()
+            .with_writer(file)
+            .with_ansi(false)
+            .init();
+
+        return Ok(());
+    }
+
+    if config.inetd.unwrap_or(false) {
+        // Never use stderr in inetd mode unless we know it is
+        // actually a separate descriptor.
+        tracing_subscriber::fmt()
+            .with_writer(std::io::sink)
+            .with_ansi(false)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_ansi(false)
+            .init();
+    }
+
+    Ok(())
+}
 
 #[cfg(unix)]
 async fn run_inetd(

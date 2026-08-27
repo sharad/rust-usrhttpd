@@ -14,6 +14,7 @@ pub struct FileConfig {
     pub port: Option<u16>,
     pub tls: Option<TlsConfig>,
     pub alog: Option<String>,
+    pub log: Option<String>,
     pub inetd: Option<bool>,
 }
 
@@ -66,6 +67,10 @@ pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
 
             alog: expand_opt(
                 args.alog.or(cfg.alog).or(Some("access.log".into()))
+            ),
+
+            log: expand_opt(
+                args.log.or(cfg.log).or(Some("error.log".into()))
             ),
 
             inetd: args.inetd.or(cfg.inetd).or(Some(false)),
