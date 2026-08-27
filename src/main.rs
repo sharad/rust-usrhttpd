@@ -54,11 +54,23 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let config = config::load_all();
 
-    info!("Starting server with root: {}, host: {}, port: {}, TLS: {}", config.root, config.host, config.port, if config.tls_cert.is_some() && config.tls_key.is_some() { "enabled" } else { "disabled" });
+    info!(
+        "Starting server with root: {}, host: {}, port: {}, TLS: {}, inetd: {}",
+        config.root,
+        config.host,
+        config.port,
+        if config.tls_cert.is_some() && config.tls_key.is_some() {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        config.inetd,
+    );
+
 
     let root = std::fs::canonicalize(&config.root)?;
 
-    let addr: SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
+    // let addr: SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
 
     let listener = TcpListener::bind(addr).await?;
     println!("Listening on {}", addr);
@@ -88,42 +100,161 @@ async fn main() -> Result<()> {
         }
     });
 
+    if config.inetd.unwrap_or(false) {
+        run_inetd(
+            root,
+            cache,
+            log,
+            tls_acceptor,
+        ).await
+    } else {
+        run_listener(
+            config.host,
+            config.port,
+            root,
+            cache,
+            log,
+            tls_acceptor,
+        ).await
+    }
+
+    // loop {
+    //     let (stream, remote) = listener.accept().await?;
+
+    //     let root = root.clone();
+    //     let cache = cache.clone();
+    //     let log = log.clone();
+    //     let tls_acceptor = tls_acceptor.clone();
+    //     // let websocket_enabled = config.websocket;
+
+    //     tokio::spawn(async move {
+    //         let service = service_fn(move |req: Request<Incoming>| {
+    //             let root = root.clone();
+    //             let cache = cache.clone();
+    //             let log = log.clone();
+
+    //             async move {
+    //                 handle_request(req, root, remote, cache, log).await
+    //             }
+    //         });
+
+    //         if let Some(acceptor) = tls_acceptor {
+    //             match acceptor.accept(stream).await {
+    //                 Ok(tls_stream) => {
+    //                     let io = TokioIo::new(tls_stream);
+    //                     serve_connection_with_options(io, service).await;
+    //                 }
+    //                 Err(e) => info!("TLS error: {}", e),
+    //             }
+    //         } else {
+    //             let io = TokioIo::new(stream);
+    //             serve_connection_with_options(io, service).await;
+    //         }
+    //     });
+    // }
+}
+
+
+#[cfg(unix)]
+async fn run_inetd(
+    root: PathBuf,
+    cache: Arc<cache::HtCache>,
+    log: Arc<access_log::AccessLogger>,
+    tls_acceptor: Option<TlsAcceptor>,
+) -> Result<()> {
+    use std::os::fd::{AsRawFd, FromRawFd};
+
+    // Shepherd/inetd gives us the connected socket on stdin (fd 0).
+    let stdin_fd = std::io::stdin().as_raw_fd();
+
+    // Duplicate fd 0 so that converting it into TcpStream does not
+    // take ownership of Shepherd's original stdin descriptor.
+    let fd = unsafe { libc::dup(stdin_fd) };
+
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+
+    let std_stream = unsafe {
+        std::net::TcpStream::from_raw_fd(fd)
+    };
+
+    std_stream.set_nonblocking(true)?;
+
+    let stream = TcpStream::from_std(std_stream)?;
+
+    let remote = stream
+        .peer_addr()
+        .unwrap_or_else(|_| {
+            "0.0.0.0:0".parse().unwrap()
+        });
+
+    info!(
+        "inetd connection accepted from {}",
+        remote
+    );
+
+    handle_stream(
+        stream,
+        remote,
+        root,
+        cache,
+        log,
+        tls_acceptor,
+    ).await;
+
+    info!(
+        "inetd connection closed: {}",
+        remote
+    );
+
+    Ok(())
+}
+
+
+async fn run_listener(
+    host: String,
+    port: u16,
+    root: PathBuf,
+    cache: Arc<cache::HtCache>,
+    log: Arc<access_log::AccessLogger>,
+    tls_acceptor: Option<TlsAcceptor>,
+) -> Result<()> {
+    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+
+    let listener = TcpListener::bind(addr).await?;
+
+    info!("Listening on {}", addr);
 
     loop {
         let (stream, remote) = listener.accept().await?;
+
+        info!(
+            "Connection accepted from {}",
+            remote
+        );
 
         let root = root.clone();
         let cache = cache.clone();
         let log = log.clone();
         let tls_acceptor = tls_acceptor.clone();
-        // let websocket_enabled = config.websocket;
 
         tokio::spawn(async move {
-            let service = service_fn(move |req: Request<Incoming>| {
-                let root = root.clone();
-                let cache = cache.clone();
-                let log = log.clone();
-
-                async move {
-                    handle_request(req, root, remote, cache, log).await
-                }
-            });
-
-            if let Some(acceptor) = tls_acceptor {
-                match acceptor.accept(stream).await {
-                    Ok(tls_stream) => {
-                        let io = TokioIo::new(tls_stream);
-                        serve_connection_with_options(io, service).await;
-                    }
-                    Err(e) => info!("TLS error: {}", e),
-                }
-            } else {
-                let io = TokioIo::new(stream);
-                serve_connection_with_options(io, service).await;
-            }
+            handle_stream(
+                stream,
+                remote,
+                root,
+                cache,
+                log,
+                tls_acceptor,
+            ).await;
         });
     }
 }
+
+
+
+
 
 
 async fn serve_connection_with_options<I, S>(
@@ -152,6 +283,108 @@ where
     }
 }
 
+// async fn handle_stream<S>(
+//     stream: S,
+//     remote: SocketAddr,
+//     root: PathBuf,
+//     cache: Arc<cache::HtCache>,
+//     log: Arc<access_log::AccessLogger>,
+//     tls_acceptor: Option<TlsAcceptor>,
+// )
+// where
+//     S: tokio::io::AsyncRead
+//         + tokio::io::AsyncWrite
+//         + Unpin
+//         + Send
+//         + 'static,
+// {
+//     let service = service_fn(move |req: Request<Incoming>| {
+//         let root = root.clone();
+//         let cache = cache.clone();
+//         let log = log.clone();
+
+//         async move {
+//             handle_request(req, root, remote, cache, log).await
+//         }
+//     });
+
+//     if let Some(acceptor) = tls_acceptor {
+//         match acceptor.accept(stream).await {
+//             Ok(tls_stream) => {
+//                 let io = TokioIo::new(tls_stream);
+//                 serve_connection_with_options(io, service).await;
+//             }
+
+//             Err(e) => {
+//                 info!("TLS error: {}", e);
+//             }
+//         }
+//     } else {
+//         let io = TokioIo::new(stream);
+//         serve_connection_with_options(io, service).await;
+//     }
+// }
+
+
+async fn handle_stream<I>(
+    stream: I,
+    remote: SocketAddr,
+    root: PathBuf,
+    cache: Arc<cache::HtCache>,
+    log: Arc<access_log::AccessLogger>,
+    tls_acceptor: Option<TlsAcceptor>,
+)
+where
+    I: tokio::io::AsyncRead
+        + tokio::io::AsyncWrite
+        + Unpin
+        + Send
+        + 'static,
+{
+    let service = service_fn(move |req: Request<Incoming>| {
+        let root = root.clone();
+        let cache = cache.clone();
+        let log = log.clone();
+
+        async move {
+            handle_request(
+                req,
+                root,
+                remote,
+                cache,
+                log,
+            ).await
+        }
+    });
+
+    if let Some(acceptor) = tls_acceptor {
+        match acceptor.accept(stream).await {
+            Ok(tls_stream) => {
+                let io = TokioIo::new(tls_stream);
+
+                serve_connection_with_options(
+                    io,
+                    service,
+                ).await;
+            }
+
+            Err(e) => {
+                info!(
+                    "TLS error from {}: {}",
+                    remote,
+                    e
+                );
+            }
+        }
+    } else {
+        let io = TokioIo::new(stream);
+
+        serve_connection_with_options(
+            io,
+            service,
+        ).await;
+    }
+}
 
 async fn handle_request(
     req: Request<Incoming>,

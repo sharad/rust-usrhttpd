@@ -14,6 +14,7 @@ pub struct FileConfig {
     pub port: Option<u16>,
     pub tls: Option<TlsConfig>,
     pub alog: Option<String>,
+    pub inetd: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,25 +40,6 @@ pub fn load_config() -> Option<FileConfig> {
 
     None
 }
-
-
-// pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
-//     if let Some(cfg) = file {
-//         Args {
-//             root: args.root.or(cfg.root).or(Some("./public".into())),
-//             host: args.host.or(cfg.host).or(Some("127.0.0.1".into())),
-//             port: args.port.or(cfg.port).or(Some(8080)),
-//             tls_cert: args.tls_cert.or(cfg.tls.as_ref().and_then(|t| t.cert.clone())),
-//             tls_key: args.tls_key.or(cfg.tls.as_ref().and_then(|t| t.key.clone())),
-//             alog: args.alog.or(cfg.alog).or(Some("access.log".into())),
-
-//             config: args.config,
-//         }
-//     } else {
-//         args
-//     }
-// }
-
 
 pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
     if let Some(cfg) = file {
@@ -85,6 +67,8 @@ pub fn merge_config(args: Args, file: Option<FileConfig>) -> Args {
             alog: expand_opt(
                 args.alog.or(cfg.alog).or(Some("access.log".into()))
             ),
+
+            inetd: args.inetd.or(cfg.inetd).or(Some(false)),
 
             config: expand_opt(args.config),
         }

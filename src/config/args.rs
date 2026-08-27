@@ -31,6 +31,10 @@ pub struct Args {
     #[arg(long)]
     pub alog: Option<String>,
 
+    /// Read the HTTP connection from stdin/stdout
+    #[arg(long)]
+    inetd: Option<bool>,
+
     /// Path to config file
     #[arg(long)]
     pub config: Option<String>,
