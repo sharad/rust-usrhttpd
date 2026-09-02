@@ -31,7 +31,7 @@ pub struct Args {
     #[arg(long)]
     pub alog: Option<String>,
 
-    /// Path to access log file
+    /// Path to log file
     #[arg(long)]
     pub log: Option<String>,
 
